@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Conversor PNG a CGA (Comparativa)</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #1a1a1a;
+            color: #0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 { text-shadow: 2px 2px #000; margin-bottom: 10px; }
+        
+        .main-container {
+            background: #333;
+            padding: 20px;
+            border: 2px solid #555;
+            border-radius: 8px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .canvas-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .canvas-label {
+            background: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #fff;
+        }
+
+        canvas {
+            border: 4px solid #fff;
+            image-rendering: pixelated; /* Look retro */
+            width: 640px; /* Doble tamaño visual para ver mejor los píxeles */
+            height: 400px;
+            background: #000;
+        }
+
+        .controls {
+            margin-top: 10px;
+            padding-top: 20px;
+            border-top: 1px dashed #777;
+        }
+
+        button {
+            background-color: #aa00aa; 
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 18px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #ff55ff; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+
+        .code-block {
+            background: #000;
+            border: 1px solid #444;
+            padding: 15px;
+            text-align: left;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 600px;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>PNG ➔ CGA (SCREEN 1)</h1>
+
+    <div class="main-container">
+        
+        <div class="canvas-wrapper">
+            <span class="canvas-label">Original (Redimensionado 320x200)</span>
+            <canvas id="canvasOriginal" width="320" height="200"></canvas>
+        </div>
+
+        <div class="canvas-wrapper">
+            <span class="canvas-label">CGA 4 Colores (Dithering Floyd-Steinberg)</span>
+            <canvas id="canvasCGA" width="320" height="200"></canvas>
+        </div>
+
+        <div class="controls">
+            <input type="file" id="fileInput" accept="image/*">
+            <br>
+            <p id="status" style="color:#aaa">Selecciona una imagen...</p>
+            <button id="btnConvert" disabled>💾 Descargar .BSV para PowerBASIC</button>
+        </div>
+
+    </div>
+
+    <div class="code-block">
+        <strong>Código PowerBASIC 3.5:</strong>
+<pre style="color: #ccc; margin:0;">
+SCREEN 1
+COLOR 0, 1  ' Fondo negro, Paleta 1 (Cian, Magenta, Blanco)
+DEF SEG = &HB800
+BLOAD "IMAGEN.BSV", 0
+DEF SEG
+WAITKEY$
+SCREEN 0
+</pre>
+    </div>
+
+    <script>
+        // === PALETA CGA (Paleta 1) ===
+        const PALETTE = [
+            { r: 0,   g: 0,   b: 0 },   // 0: Negro
+            { r: 85,  g: 255, b: 255 }, // 1: Cian
+            { r: 255, g: 85,  b: 255 }, // 2: Magenta
+            { r: 255, g: 255, b: 255 }  // 3: Blanco
+        ];
+
+        const fileInput = document.getElementById('fileInput');
+        const btnConvert = document.getElementById('btnConvert');
+        const status = document.getElementById('status');
+        
+        // Obtenemos los dos contextos
+        const ctxOrig = document.getElementById('canvasOriginal').getContext('2d');
+        const canvasCGA = document.getElementById('canvasCGA');
+        const ctxCGA = canvasCGA.getContext('2d', { willReadFrequently: true });
+        
+        let fileName = "imagen";
+
+        // 1. CARGA DE IMAGEN
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            fileName = file.name.split('.')[0];
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+
+            img.onload = () => {
+                // Limpiar lienzos
+                ctxOrig.clearRect(0, 0, 320, 200);
+                ctxCGA.clearRect(0, 0, 320, 200);
+
+                // 1. Dibujar en el lienzo original (Solo resize)
+                ctxOrig.drawImage(img, 0, 0, 320, 200);
+
+                // 2. Dibujar en el lienzo CGA (para procesar)
+                ctxCGA.drawImage(img, 0, 0, 320, 200);
+                
+                // 3. Aplicar efecto CGA sobre el segundo lienzo
+                status.innerText = "Procesando...";
+                setTimeout(() => {
+                    applyFloydSteinberg();
+                    btnConvert.disabled = false;
+                    status.innerText = "✅ Conversión lista. Compara las imágenes.";
+                }, 50); // Pequeño delay para que la UI no se congele
+                
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        });
+
+        // 2. ALGORITMO FLOYD-STEINBERG (Dithering)
+        function applyFloydSteinberg() {
+            const imgData = ctxCGA.getImageData(0, 0, 320, 200);
+            const data = imgData.data;
+            const width = 320;
+            const height = 200;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+
+                    const oldR = data[i];
+                    const oldG = data[i + 1];
+                    const oldB = data[i + 2];
+
+                    // Buscar color más cercano en la paleta
+                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB);
+                    const newColor = PALETTE[closestIdx];
+
+                    // Pintar píxel
+                    data[i] = newColor.r;
+                    data[i + 1] = newColor.g;
+                    data[i + 2] = newColor.b;
+
+                    // Calcular error
+                    const errR = oldR - newColor.r;
+                    const errG = oldG - newColor.g;
+                    const errB = oldB - newColor.b;
+
+                    // Distribuir error a vecinos
+                    distributeError(data, x + 1, y, errR, errG, errB, 7 / 16);
+                    distributeError(data, x - 1, y + 1, errR, errG, errB, 3 / 16);
+                    distributeError(data, x, y + 1, errR, errG, errB, 5 / 16);
+                    distributeError(data, x + 1, y + 1, errR, errG, errB, 1 / 16);
+                }
+            }
+            ctxCGA.putImageData(imgData, 0, 0);
+        }
+
+        function distributeError(data, x, y, errR, errG, errB, factor) {
+            if (x < 0 || x >= 320 || y >= 200) return;
+            const i = (y * 320 + x) * 4;
+            
+            data[i] = clamp(data[i] + errR * factor);
+            data[i+1] = clamp(data[i+1] + errG * factor);
+            data[i+2] = clamp(data[i+2] + errB * factor);
+        }
+
+        function clamp(value) {
+            return Math.max(0, Math.min(255, value));
+        }
+
+        function getClosestColorIndex(r, g, b) {
+            let minDiff = Infinity;
+            let closest = 0;
+            PALETTE.forEach((col, index) => {
+                // Distancia Euclidiana
+                const diff = (r - col.r)**2 + (g - col.g)**2 + (b - col.b)**2;
+                if (diff < minDiff) { minDiff = diff; closest = index; }
+            });
+            return closest;
+        }
+
+        // 3. GENERAR Y DESCARGAR BSAVE
+        btnConvert.addEventListener('click', () => {
+            const imgData = ctxCGA.getImageData(0, 0, 320, 200);
+            const pixels = imgData.data; 
+
+            // Buffer: Header (7 bytes) + CGA Memory (16KB)
+            const buffer = new Uint8Array(7 + 16384);
+            const view = new DataView(buffer.buffer);
+
+            // Header BSAVE
+            view.setUint8(0, 0xFD);
+            view.setUint16(1, 0xB800, true); // Seg B800
+            view.setUint16(3, 0x0000, true); // Offset 0
+            view.setUint16(5, 16384, true);  // Length
+
+            // CGA Interlacing logic
+            const EVEN_OFFSET = 7;
+            const ODD_OFFSET = 7 + 8192;
+
+            for (let y = 0; y < 200; y++) {
+                const isOdd = (y % 2 !== 0);
+                const lineIndex = Math.floor(y / 2); 
+                const baseOffset = isOdd ? ODD_OFFSET : EVEN_OFFSET;
+                const lineStart = baseOffset + (lineIndex * 80); 
+
+                for (let x = 0; x < 320; x += 4) {
+                    let byteVal = 0;
+                    for (let k = 0; k < 4; k++) {
+                        const idx = ((y * 320) + (x + k)) * 4;
+                        const r = pixels[idx];
+                        const g = pixels[idx+1];
+                        // Detectar índice de color exacto (ya convertido)
+                        let colorBits = 0; 
+                        if (r > 200 && g < 100) colorBits = 2; // Magenta
+                        else if (r < 100 && g > 200) colorBits = 1; // Cian
+                        else if (r > 200 && g > 200) colorBits = 3; // Blanco
+                        
+                        // Empaquetar 2 bits por píxel
+                        byteVal |= (colorBits << (6 - (k * 2)));
+                    }
+                    buffer[lineStart + (x / 4)] = byteVal;
+                }
+            }
+            
+            // Descarga
+            const blob = new Blob([buffer], { type: "application/octet-stream" });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName + "_CGA.BSV";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>
