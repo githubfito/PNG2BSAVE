@@ -59,6 +59,15 @@
             padding-bottom: 10px;
         }
 
+        .settings-row {
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            font-size: 0.9em;
+        }
+
         button {
             background-color: #aa00aa; 
             color: white;
@@ -127,14 +136,17 @@
         
         <div class="controls">
             <input type="file" id="fileInput" accept="image/*, .bsv">
-            <br>
+            <div id="pngSettings" class="settings-row">
+                <input type="checkbox" id="chkResize" checked>
+                <label for="chkResize">Adaptar a 320x200 (Estirar)</label>
+            </div>
             <p id="status" style="color:#aaa">Selecciona una imagen...</p>
             <button id="btnConvert" disabled>💾 Descargar .BSV</button>
         </div>
 
 
         <div id="canvasPngToBsave" class="canvas-wrapper">
-            <span class="canvas-label" id="originalCanvasLabel">Original (Redimensionado 320x200)</span>
+            <span class="canvas-label" id="originalCanvasLabel">Original (Redimensionado)</span>
             <canvas id="canvasOriginal" width="320" height="200"></canvas>
         </div>
 
@@ -159,21 +171,30 @@ SCREEN 0
     </div>
 
     <script>
-        // === PALETA CGA (Paleta 1: Fondo negro, colores cian, magenta, blanco) ===
+        // === CONSTANTES ===
         const PALETTE = [
             { r: 0,   g: 0,   b: 0, index: 0 },    // 0: Negro
-            { r: 85,  g: 255, b: 255, index: 1 }, // 1: Cian (Alto Brillo)
-            { r: 255, g: 85,  b: 255, index: 2 }, // 2: Magenta (Alto Brillo)
-            { r: 255, g: 255, b: 255, index: 3 }  // 3: Blanco (Alto Brillo)
+            { r: 85,  g: 255, b: 255, index: 1 }, // 1: Cian
+            { r: 255, g: 85,  b: 255, index: 2 }, // 2: Magenta
+            { r: 255, g: 255, b: 255, index: 3 }  // 3: Blanco
         ];
         const CGA_WIDTH = 320;
         const CGA_HEIGHT = 200;
         const CGA_MEMORY_SIZE = 16384; 
 
+        // === ESTADO GLOBAL ===
+        let currentMode = 'pngToBsave';
+        let fileName = "imagen";
+        let currentImage = null; // Almacena el objeto Image cargado para poder reprocesarlo
+
+        // === ELEMENTOS DEL DOM ===
         const fileInput = document.getElementById('fileInput');
         const btnConvert = document.getElementById('btnConvert');
         const status = document.getElementById('status');
         const modeRadios = document.querySelectorAll('input[name="conversionMode"]');
+        const chkResize = document.getElementById('chkResize');
+        const pngSettingsDiv = document.getElementById('pngSettings');
+
         const canvasOriginal = document.getElementById('canvasOriginal');
         const canvasCGA = document.getElementById('canvasCGA');
         const ctxOrig = canvasOriginal.getContext('2d');
@@ -182,8 +203,6 @@ SCREEN 0
         const originalCanvasLabel = document.getElementById('originalCanvasLabel');
         const cgaCanvasLabel = document.getElementById('cgaCanvasLabel');
         
-        let currentMode = 'pngToBsave';
-        let fileName = "imagen";
 
         // === UTILIDADES ===
 
@@ -201,6 +220,21 @@ SCREEN 0
             return Math.max(0, Math.min(255, value));
         }
 
+        // === CÁLCULO DE REDIMENSIONAMIENTO (Sin stretch) ===
+        function calculateFitDimensions(imgW, imgH, targetW, targetH) {
+            const ratioW = targetW / imgW;
+            const ratioH = targetH / imgH;
+            const ratio = Math.min(ratioW, ratioH); 
+
+            const newW = imgW * ratio;
+            const newH = imgH * ratio;
+
+            const offsetX = (targetW - newW) / 2;
+            const offsetY = (targetH - newH) / 2;
+
+            return { newW: newW, newH: newH, offsetX: offsetX, offsetY: offsetY };
+        }
+
         // === CAMBIO DE MODO ===
         function updateMode(mode) {
             currentMode = mode;
@@ -208,19 +242,22 @@ SCREEN 0
             btnConvert.disabled = true;
             ctxOrig.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
             ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
-            
+            currentImage = null; // Limpiar imagen actual
+
             if (mode === 'pngToBsave') {
                 fileInput.accept = 'image/*';
-                canvasPngToBsaveDiv.style.display = 'flex'; // Mostrar ambos
-                originalCanvasLabel.innerText = 'Original (Redimensionado 320x200)';
+                pngSettingsDiv.style.display = 'flex'; 
+                canvasPngToBsaveDiv.style.display = 'flex'; 
+                originalCanvasLabel.innerText = 'Original (Redimensionado)';
                 cgaCanvasLabel.innerText = 'CGA 4 Colores (Dithering Floyd-Steinberg)';
                 btnConvert.innerText = '💾 Descargar .BSV';
                 status.innerText = 'Selecciona una imagen PNG o JPG...';
             } else {
                 fileInput.accept = '.bsv';
-                canvasPngToBsaveDiv.style.display = 'flex'; // Mantener visible el superior
-                originalCanvasLabel.innerText = 'Previsualización 1';
-                cgaCanvasLabel.innerText = 'Previsualización 2';
+                pngSettingsDiv.style.display = 'none'; 
+                canvasPngToBsaveDiv.style.display = 'flex'; 
+                originalCanvasLabel.innerText = 'Previsualización 1 (Desde BSAVE)';
+                cgaCanvasLabel.innerText = 'Previsualización 2 (Desde BSAVE)';
                 btnConvert.innerText = '🖼️ Descargar PNG';
                 status.innerText = 'Selecciona un archivo .BSV (Formato CGA SCREEN 1)...';
             }
@@ -229,8 +266,7 @@ SCREEN 0
         updateMode(currentMode); 
 
 
-        // === 1. LÓGICA PNG a BSAVE (Conversión + Dithering) ===
-
+        // === LÓGICA PNG a BSAVE: Dithering y Conversión ===
         function applyFloydSteinberg(data) {
             const width = CGA_WIDTH;
             const height = CGA_HEIGHT;
@@ -281,7 +317,6 @@ SCREEN 0
             view.setUint16(3, 0xB800, true); 
             view.setUint16(5, CGA_MEMORY_SIZE, true); 
 
-            // Lógica de entrelazado CGA
             const EVEN_OFFSET = 7;
             const ODD_OFFSET = 7 + CGA_MEMORY_SIZE / 2; 
 
@@ -303,6 +338,7 @@ SCREEN 0
                         const g = pixels[idx+1];
                         const b = pixels[idx+2];
                         
+                        // Mapeo simple de RGB a índice de color CGA (0-3).
                         for(let c=0; c<PALETTE.length; c++) {
                             const pal = PALETTE[c];
                             if (r === pal.r && g === pal.g && b === pal.b) {
@@ -318,8 +354,54 @@ SCREEN 0
             }
             return buffer;
         }
+        
+        // Función principal de procesamiento de imagen PNG
+        function processImage(img) {
+            btnConvert.disabled = true;
+            status.innerText = "Procesando...";
 
-        // === 2. LÓGICA BSAVE a PNG (Descompresión) ===
+            // 1. Limpiar lienzos y dibujar fondo negro (0, 0, 0)
+            ctxOrig.fillStyle = 'black';
+            ctxOrig.fillRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            ctxCGA.fillStyle = 'black';
+            ctxCGA.fillRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+
+            const adaptChecked = chkResize.checked;
+            let drawX, drawY, drawW, drawH;
+            
+            if (adaptChecked) {
+                // Modo Estirar/Comprimir a 320x200
+                drawX = 0;
+                drawY = 0;
+                drawW = CGA_WIDTH;
+                drawH = CGA_HEIGHT;
+                originalCanvasLabel.innerText = 'Original (Estirado 320x200)';
+            } else {
+                // Modo Ajustar manteniendo Aspect Ratio
+                const fit = calculateFitDimensions(img.width, img.height, CGA_WIDTH, CGA_HEIGHT);
+                drawW = fit.newW;
+                drawH = fit.newH;
+                drawX = fit.offsetX;
+                drawY = fit.offsetY;
+                originalCanvasLabel.innerText = 'Original (Ajustado A.R.)';
+            }
+
+            // 2. Dibujar imagen redimensionada
+            ctxOrig.drawImage(img, drawX, drawY, drawW, drawH);
+            ctxCGA.drawImage(img, drawX, drawY, drawW, drawH);
+            
+            // 3. Aplicar Dithering CGA (pequeño delay para no bloquear la UI)
+            setTimeout(() => {
+                const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
+                applyFloydSteinberg(imgData.data);
+                ctxCGA.putImageData(imgData, 0, 0);
+                btnConvert.disabled = false;
+                status.innerText = "✅ Conversión lista. Compara las imágenes.";
+            }, 50); 
+        }
+
+
+        // === LÓGICA BSAVE a PNG (Descompresión) ===
         
         function processBsave(buffer) {
             const data = new DataView(buffer);
@@ -360,12 +442,9 @@ SCREEN 0
                 }
             }
             
-            // 1. Dibujar en el lienzo CGA (inferior)
             ctxCGA.putImageData(imgData, 0, 0);
+            ctxOrig.putImageData(imgData, 0, 0); // Copiar al superior
             
-            // 2. Copiar al lienzo superior (Original) para tener doble previsualización
-            ctxOrig.putImageData(imgData, 0, 0);
-
             btnConvert.disabled = false;
             status.innerText = `✅ Conversión lista. Descarga el PNG de ${CGA_WIDTH}x${CGA_HEIGHT}.`;
         }
@@ -379,25 +458,16 @@ SCREEN 0
             fileName = file.name.split('.')[0];
             ctxOrig.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
             ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
-            btnConvert.disabled = true;
-            status.innerText = "Procesando...";
+            
+            currentImage = null; // Resetear la imagen
 
             if (currentMode === 'pngToBsave') {
                 const img = new Image();
                 const url = URL.createObjectURL(file);
 
                 img.onload = () => {
-                    ctxOrig.drawImage(img, 0, 0, CGA_WIDTH, CGA_HEIGHT);
-                    ctxCGA.drawImage(img, 0, 0, CGA_WIDTH, CGA_HEIGHT);
-                    
-                    setTimeout(() => {
-                        const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
-                        applyFloydSteinberg(imgData.data);
-                        ctxCGA.putImageData(imgData, 0, 0);
-                        btnConvert.disabled = false;
-                        status.innerText = "✅ Conversión lista. Compara las imágenes.";
-                    }, 50); 
-                    
+                    currentImage = img; // Guardar la imagen en el estado global
+                    processImage(img);
                     URL.revokeObjectURL(url);
                 };
                 img.src = url;
@@ -410,6 +480,14 @@ SCREEN 0
                     status.innerText = `Error al leer el archivo BSAVE: ${error.message}`;
                     console.error(error);
                 }
+            }
+        });
+
+        // === CONTROLADOR DE CHECKBOX (NUEVO) ===
+        chkResize.addEventListener('change', () => {
+            if (currentMode === 'pngToBsave' && currentImage) {
+                // Si estamos en modo PNG y ya hay una imagen cargada, reprocesamos.
+                processImage(currentImage);
             }
         });
 
@@ -428,7 +506,6 @@ SCREEN 0
                 link.click();
                 document.body.removeChild(link);
             } else if (currentMode === 'bsaveToPng') {
-                // Descargamos el contenido del canvas CGA, que ya tiene el PNG descompuesto
                 const link = document.createElement('a');
                 link.download = fileName + "_CGA.png";
                 link.href = canvasCGA.toDataURL('image/png');
