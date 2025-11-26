@@ -62,13 +62,13 @@
         .settings-row {
             margin-top: 10px;
             display: flex;
+            flex-wrap: wrap; 
             justify-content: center;
             align-items: center;
             gap: 15px;
             font-size: 0.9em;
         }
         
-        /* Estilo para el desplegable y etiquetas */
         select {
             background-color: #555;
             color: #0f0;
@@ -154,10 +154,19 @@
                 <input type="checkbox" id="chkResize" checked>
                 <label for="chkResize">Adaptar a 320x200 (Estirar)</label>
                 
-                <label for="selectPalette">Paleta CGA:</label>
+                <label for="selectPalette">Paleta:</label>
                 <select id="selectPalette">
                     <option value="palette1">Paleta 1 (Cian, Magenta, Blanco)</option>
                     <option value="palette2">Paleta 2 (Verde, Rojo, Marrón)</option>
+                </select>
+                
+                <label for="selectDithering">Dithering:</label>
+                <select id="selectDithering">
+                    <option value="floyd-steinberg" selected>Floyd-Steinberg (Granulado)</option>
+                    <option value="bayer">Bayer 4x4 (Patrón Sólido)</option>
+                    <option value="jjn">Jarvis-Judice-Ninke (Alta Calidad)</option>
+                    <option value="stucki">Stucki (Buen Balance)</option>
+                    <option value="none">Ninguno (Umbral Fijo)</option>
                 </select>
             </div>
             <p id="status" style="color:#aaa">Selecciona una imagen...</p>
@@ -171,7 +180,7 @@
         </div>
 
         <div class="canvas-wrapper">
-            <span class="canvas-label" id="cgaCanvasLabel">CGA 4 Colores (Dithering Floyd-Steinberg)</span>
+            <span class="canvas-label" id="cgaCanvasLabel">CGA 4 Colores (Dithering)</span>
             <canvas id="canvasCGA" width="320" height="200"></canvas>
         </div>
 
@@ -191,26 +200,34 @@ SCREEN 0
     </div>
 
     <script>
-        // === DEFINICIONES DE PALETAS CGA ===
+        // === DEFINICIONES Y CONSTANTES ===
         const CGA_PALETTES = {
-            // Negro siempre es el índice 0 para el fondo (COLOR 0, X)
             palette1: [
-                { r: 0,   g: 0,   b: 0, index: 0 },    // 0: Negro (Default Background)
-                { r: 85,  g: 255, b: 255, index: 1 }, // 1: Cian (High Intensity)
-                { r: 255, g: 85,  b: 255, index: 2 }, // 2: Magenta (High Intensity)
-                { r: 255, g: 255, b: 255, index: 3 }  // 3: Blanco (High Intensity)
+                { r: 0,   g: 0,   b: 0, index: 0 },
+                { r: 85,  g: 255, b: 255, index: 1 }, 
+                { r: 255, g: 85,  b: 255, index: 2 }, 
+                { r: 255, g: 255, b: 255, index: 3 }
             ],
-            // Paleta del bit de intensidad bajo (Low Intensity)
             palette2: [ 
-                { r: 0,   g: 0,   b: 0, index: 0 },    // 0: Negro (Default Background)
-                { r: 85,  g: 255, b: 85, index: 1 },  // 1: Verde (Low Intensity)
-                { r: 255, g: 85,  b: 85, index: 2 },  // 2: Rojo (Low Intensity)
-                { r: 255, g: 255, b: 85, index: 3 }   // 3: Marrón/Amarillo Oscuro (Low Intensity)
+                { r: 0,   g: 0,   b: 0, index: 0 },
+                { r: 85,  g: 255, b: 85, index: 1 }, 
+                { r: 255, g: 85,  b: 85, index: 2 },  
+                { r: 255, g: 255, b: 85, index: 3 }
             ]
         };
         const CGA_WIDTH = 320;
         const CGA_HEIGHT = 200;
         const CGA_MEMORY_SIZE = 16384; 
+        
+        // Matriz de Bayer 4x4
+        const BAYER_MATRIX = [
+            [0, 8, 2, 10],
+            [12, 4, 14, 6],
+            [3, 11, 1, 9],
+            [15, 7, 13, 5]
+        ];
+        const BAYER_SIZE = 4;
+        const BAYER_DIVISOR = BAYER_SIZE * BAYER_SIZE; // 16
 
         // === ESTADO GLOBAL ===
         let currentMode = 'pngToBsave';
@@ -224,7 +241,8 @@ SCREEN 0
         const modeRadios = document.querySelectorAll('input[name="conversionMode"]');
         const chkResize = document.getElementById('chkResize');
         const pngSettingsDiv = document.getElementById('pngSettings');
-        const selectPalette = document.getElementById('selectPalette'); // NUEVO
+        const selectPalette = document.getElementById('selectPalette'); 
+        const selectDithering = document.getElementById('selectDithering'); 
 
         const canvasOriginal = document.getElementById('canvasOriginal');
         const canvasCGA = document.getElementById('canvasCGA');
@@ -234,7 +252,6 @@ SCREEN 0
         const originalCanvasLabel = document.getElementById('originalCanvasLabel');
         const cgaCanvasLabel = document.getElementById('cgaCanvasLabel');
         
-        // Inicializa la paleta activa
         let activePalette = CGA_PALETTES[selectPalette.value];
 
 
@@ -244,7 +261,7 @@ SCREEN 0
             let minDiff = Infinity;
             let closest = 0;
             palette.forEach((col, index) => {
-                // Cálculo de distancia euclidiana en RGB
+                // Distancia euclidiana simplificada (sin raíz cuadrada)
                 const diff = (r - col.r)**2 + (g - col.g)**2 + (b - col.b)**2;
                 if (diff < minDiff) { minDiff = diff; closest = index; }
             });
@@ -269,7 +286,6 @@ SCREEN 0
             return { newW: newW, newH: newH, offsetX: offsetX, offsetY: offsetY };
         }
 
-        // Función para actualizar el texto de la previsualización del código
         function updateCodeBlock(paletteKey) {
             const codeBlock = document.querySelector('.code-block pre');
             let colorSetting = '';
@@ -278,9 +294,6 @@ SCREEN 0
                 colorSetting = 'COLOR 0, 1  \' Fondo Negro, Paleta 1 (Cian, Magenta, Blanco)';
             } else if (paletteKey === 'palette2') {
                 colorSetting = 'COLOR 0, 0  \' Fondo Negro, Paleta 0 (Verde, Rojo, Marrón)';
-            } else {
-                 // Esto no debería pasar, pero como fallback
-                colorSetting = 'COLOR 0, 1  \' Fondo Negro, Paleta 1';
             }
 
             codeBlock.innerHTML = `
@@ -303,20 +316,21 @@ SCREEN 0
             ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
             currentImage = null; 
             
-            // Refrescar la paleta activa en caso de que se haya cambiado
             activePalette = CGA_PALETTES[selectPalette.value];
 
             if (mode === 'pngToBsave') {
                 fileInput.accept = 'image/*';
                 pngSettingsDiv.style.display = 'flex'; 
+                selectDithering.style.display = 'block'; 
                 canvasPngToBsaveDiv.style.display = 'flex'; 
                 originalCanvasLabel.innerText = 'Original (Redimensionado)';
-                cgaCanvasLabel.innerText = 'CGA 4 Colores (Dithering Floyd-Steinberg)';
+                cgaCanvasLabel.innerText = 'CGA 4 Colores (Dithering)';
                 btnConvert.innerText = '💾 Descargar .BSV';
                 status.innerText = 'Selecciona una imagen PNG o JPG...';
             } else {
                 fileInput.accept = '.bsv';
                 pngSettingsDiv.style.display = 'none'; 
+                selectDithering.style.display = 'none'; 
                 canvasPngToBsaveDiv.style.display = 'flex'; 
                 originalCanvasLabel.innerText = 'Previsualización 1 (Desde BSAVE)';
                 cgaCanvasLabel.innerText = 'Previsualización 2 (Desde BSAVE)';
@@ -324,13 +338,22 @@ SCREEN 0
                 status.innerText = 'Selecciona un archivo .BSV (Formato CGA SCREEN 1)...';
             }
 
-            updateCodeBlock(selectPalette.value); // Actualiza el bloque de código
+            updateCodeBlock(selectPalette.value); 
         }
-        modeRadios.forEach(radio => radio.addEventListener('change', (e) => updateMode(e.target.value)));
+
+        // --- Dithering Algoritmos ---
+
+        // Función auxiliar para distribuir el error
+        function distributeError(data, x, y, errR, errG, errB, factor) {
+            if (x < 0 || x >= CGA_WIDTH || y >= CGA_HEIGHT) return;
+            const i = (y * CGA_WIDTH + x) * 4;
+            
+            data[i] = clamp(data[i] + errR * factor);
+            data[i+1] = clamp(data[i+1] + errG * factor);
+            data[i+2] = clamp(data[i+2] + errB * factor);
+        }
         
-
-
-        // === LÓGICA PNG a BSAVE: Dithering y Conversión ===
+        // 1. Floyd-Steinberg (Dispersión de Error: 16)
         function applyFloydSteinberg(data, palette) {
             const width = CGA_WIDTH;
             const height = CGA_HEIGHT;
@@ -343,17 +366,16 @@ SCREEN 0
                     const oldG = data[i + 1];
                     const oldB = data[i + 2];
 
-                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); // Usa la paleta activa
+                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
                     const newColor = palette[closestIdx];
 
-                    data[i] = newColor.r;
-                    data[i + 1] = newColor.g;
-                    data[i + 2] = newColor.b;
+                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
 
                     const errR = oldR - newColor.r;
                     const errG = oldG - newColor.g;
                     const errB = oldB - newColor.b;
 
+                    // Distribución del error: [7/16] [3/16] [5/16] [1/16]
                     distributeError(data, x + 1, y, errR, errG, errB, 7 / 16);
                     distributeError(data, x - 1, y + 1, errR, errG, errB, 3 / 16);
                     distributeError(data, x, y + 1, errR, errG, errB, 5 / 16);
@@ -362,13 +384,148 @@ SCREEN 0
             }
         }
         
+        // 2. Jarvis, Judice & Ninke (Dispersión de Error: 48)
+        function applyJarvisJudiceNinke(data, palette) {
+            const width = CGA_WIDTH;
+            const height = CGA_HEIGHT;
+            const divisor = 48; // Total de la suma de pesos
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+
+                    const oldR = data[i];
+                    const oldG = data[i + 1];
+                    const oldB = data[i + 2];
+
+                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
+                    const newColor = palette[closestIdx];
+
+                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
+
+                    const errR = oldR - newColor.r;
+                    const errG = oldG - newColor.g;
+                    const errB = oldB - newColor.b;
+
+                    // Fila 1: (7) (5)
+                    distributeError(data, x + 1, y, errR, errG, errB, 7 / divisor);
+                    distributeError(data, x + 2, y, errR, errG, errB, 5 / divisor);
+                    
+                    // Fila 2: (3) (5) (7) (5) (3)
+                    distributeError(data, x - 2, y + 1, errR, errG, errB, 3 / divisor);
+                    distributeError(data, x - 1, y + 1, errR, errG, errB, 5 / divisor);
+                    distributeError(data, x, y + 1, errR, errG, errB, 7 / divisor);
+                    distributeError(data, x + 1, y + 1, errR, errG, errB, 5 / divisor);
+                    distributeError(data, x + 2, y + 1, errR, errG, errB, 3 / divisor);
+                    
+                    // Fila 3: (1) (3) (5) (3) (1)
+                    distributeError(data, x - 2, y + 2, errR, errG, errB, 1 / divisor);
+                    distributeError(data, x - 1, y + 2, errR, errG, errB, 3 / divisor);
+                    distributeError(data, x, y + 2, errR, errG, errB, 5 / divisor);
+                    distributeError(data, x + 1, y + 2, errR, errG, errB, 3 / divisor);
+                    distributeError(data, x + 2, y + 2, errR, errG, errB, 1 / divisor);
+                }
+            }
+        }
+        
+        // 3. Stucki (Dispersión de Error: 42)
+        function applyStucki(data, palette) {
+            const width = CGA_WIDTH;
+            const height = CGA_HEIGHT;
+            const divisor = 42; // Total de la suma de pesos
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+
+                    const oldR = data[i];
+                    const oldG = data[i + 1];
+                    const oldB = data[i + 2];
+
+                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
+                    const newColor = palette[closestIdx];
+
+                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
+
+                    const errR = oldR - newColor.r;
+                    const errG = oldG - newColor.g;
+                    const errB = oldB - newColor.b;
+
+                    // Fila 1: (8) (4)
+                    distributeError(data, x + 1, y, errR, errG, errB, 8 / divisor);
+                    distributeError(data, x + 2, y, errR, errG, errB, 4 / divisor);
+                    
+                    // Fila 2: (2) (4) (8) (4) (2)
+                    distributeError(data, x - 2, y + 1, errR, errG, errB, 2 / divisor);
+                    distributeError(data, x - 1, y + 1, errR, errG, errB, 4 / divisor);
+                    distributeError(data, x, y + 1, errR, errG, errB, 8 / divisor);
+                    distributeError(data, x + 1, y + 1, errR, errG, errB, 4 / divisor);
+                    distributeError(data, x + 2, y + 1, errR, errG, errB, 2 / divisor);
+                    
+                    // Fila 3: (1) (2) (4) (2) (1)
+                    distributeError(data, x - 2, y + 2, errR, errG, errB, 1 / divisor);
+                    distributeError(data, x - 1, y + 2, errR, errG, errB, 2 / divisor);
+                    distributeError(data, x, y + 2, errR, errG, errB, 4 / divisor);
+                    distributeError(data, x + 1, y + 2, errR, errG, errB, 2 / divisor);
+                    distributeError(data, x + 2, y + 2, errR, errG, errB, 1 / divisor);
+                }
+            }
+        }
+
+
+        // 4. Bayer Ordered Dithering (Umbral Ordenado)
+        function applyBayerDithering(data, palette) {
+            const width = CGA_WIDTH;
+            const height = CGA_HEIGHT;
+            const thresholdScale = 255 / (palette.length - 1) / BAYER_DIVISOR;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+
+                    const oldR = data[i];
+                    const oldG = data[i + 1];
+                    const oldB = data[i + 2];
+                    
+                    const bayerThreshold = BAYER_MATRIX[y % BAYER_SIZE][x % BAYER_SIZE] * thresholdScale;
+
+                    const r = clamp(oldR + bayerThreshold);
+                    const g = clamp(oldG + bayerThreshold);
+                    const b = clamp(oldB + bayerThreshold);
+
+                    const closestIdx = getClosestColorIndex(r, g, b, palette);
+                    const newColor = palette[closestIdx];
+
+                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
+                }
+            }
+        }
+
+        // 5. Ninguno (Umbral Fijo)
+        function applyNoDithering(data, palette) {
+            const width = CGA_WIDTH;
+            const height = CGA_HEIGHT;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+                    
+                    const closestIdx = getClosestColorIndex(data[i], data[i+1], data[i+2], palette);
+                    const newColor = palette[closestIdx];
+
+                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
+                }
+            }
+        }
+
+
         // Función principal de procesamiento de imagen PNG
         function processImage(img) {
             if (currentMode !== 'pngToBsave') return; 
 
-            btnConvert.disabled = true;
             status.innerText = "Procesando...";
-            activePalette = CGA_PALETTES[selectPalette.value]; // Asegurar que usamos la paleta seleccionada
+            activePalette = CGA_PALETTES[selectPalette.value];
+            const ditheringMode = selectDithering.value; 
 
             // 1. Limpiar lienzos y dibujar fondo negro (0, 0, 0)
             ctxOrig.fillStyle = 'black';
@@ -380,19 +537,11 @@ SCREEN 0
             let drawX, drawY, drawW, drawH;
             
             if (adaptChecked) {
-                // Modo Estirar/Comprimir a 320x200
-                drawX = 0;
-                drawY = 0;
-                drawW = CGA_WIDTH;
-                drawH = CGA_HEIGHT;
+                drawX = 0; drawY = 0; drawW = CGA_WIDTH; drawH = CGA_HEIGHT;
                 originalCanvasLabel.innerText = 'Original (Estirado 320x200)';
             } else {
-                // Modo Ajustar manteniendo Aspect Ratio
                 const fit = calculateFitDimensions(img.width, img.height, CGA_WIDTH, CGA_HEIGHT);
-                drawW = fit.newW;
-                drawH = fit.newH;
-                drawX = fit.offsetX;
-                drawY = fit.offsetY;
+                drawW = fit.newW; drawH = fit.newH; drawX = fit.offsetX; drawY = fit.offsetY;
                 originalCanvasLabel.innerText = 'Original (Ajustado A.R.)';
             }
 
@@ -401,41 +550,55 @@ SCREEN 0
             ctxCGA.drawImage(img, drawX, drawY, drawW, drawH);
             
             // 3. Aplicar Dithering CGA
+            // Usamos setTimeout para asegurar que el DOM refresque la imagen antes de leerla
+            // (aunque no es estrictamente necesario en este entorno simple, ayuda a simular un proceso)
             setTimeout(() => {
-                const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
-                applyFloydSteinberg(imgData.data, activePalette); // Pasa la paleta activa
-                ctxCGA.putImageData(imgData, 0, 0);
-                btnConvert.disabled = false;
-                status.innerText = "✅ Conversión lista. Compara las imágenes.";
+                try {
+                    const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
+                    
+                    let ditheringName = '';
+
+                    if (ditheringMode === 'floyd-steinberg') {
+                        applyFloydSteinberg(imgData.data, activePalette);
+                        ditheringName = 'Floyd-Steinberg (Granulado)';
+                    } else if (ditheringMode === 'bayer') {
+                        applyBayerDithering(imgData.data, activePalette);
+                        ditheringName = 'Bayer 4x4 (Patrón Sólido)';
+                    } else if (ditheringMode === 'jjn') {
+                        applyJarvisJudiceNinke(imgData.data, activePalette);
+                        ditheringName = 'Jarvis-Judice-Ninke (Alta Calidad)';
+                    } else if (ditheringMode === 'stucki') {
+                        applyStucki(imgData.data, activePalette);
+                        ditheringName = 'Stucki (Buen Balance)';
+                    } else if (ditheringMode === 'none') {
+                        applyNoDithering(imgData.data, activePalette);
+                        ditheringName = 'Umbral Fijo (Ninguno)';
+                    }
+                    
+                    cgaCanvasLabel.innerText = `CGA 4 Colores (${ditheringName})`;
+                    ctxCGA.putImageData(imgData, 0, 0);
+                    btnConvert.disabled = false; // Habilitar el botón aquí
+                    status.innerText = "✅ Conversión lista. Compara las imágenes.";
+                } catch(e) {
+                    status.innerText = `⚠️ Error al aplicar el dithering: ${e.message}`;
+                    btnConvert.disabled = true;
+                    console.error("Dithering Error:", e);
+                }
             }, 50); 
             
             updateCodeBlock(selectPalette.value);
         }
 
-        // Lógica de error (mantiene el mismo código)
-        function distributeError(data, x, y, errR, errG, errB, factor) {
-            if (x < 0 || x >= CGA_WIDTH || y >= CGA_HEIGHT) return;
-            const i = (y * CGA_WIDTH + x) * 4;
-            
-            data[i] = clamp(data[i] + errR * factor);
-            data[i+1] = clamp(data[i+1] + errG * factor);
-            data[i+2] = clamp(data[i+2] + errB * factor);
-        }
-
+        // --- Generación BSAVE y Descompresión (Mantienen la lógica original) ---
+        
         function generateBsave(pixels) {
             const buffer = new Uint8Array(7 + CGA_MEMORY_SIZE);
             const view = new DataView(buffer.buffer);
-
-            // Header BSAVE
-            view.setUint8(0, 0xFD);
-            view.setUint16(1, 0x0000, true); 
-            view.setUint16(3, 0xB800, true); 
-            view.setUint16(5, CGA_MEMORY_SIZE, true); 
+            view.setUint8(0, 0xFD); view.setUint16(1, 0x0000, true); 
+            view.setUint16(3, 0xB800, true); view.setUint16(5, CGA_MEMORY_SIZE, true); 
 
             const EVEN_OFFSET = 7;
             const ODD_OFFSET = 7 + CGA_MEMORY_SIZE / 2; 
-
-            // Usamos la paleta activa para el mapeo
             const paletteToUse = CGA_PALETTES[selectPalette.value];
 
             for (let y = 0; y < CGA_HEIGHT; y++) {
@@ -449,14 +612,11 @@ SCREEN 0
                     for (let k = 0; k < 4; k++) {
                         const pixelX = x + k;
                         const idx = ((y * CGA_WIDTH) + pixelX) * 4;
-                        
                         let colorIndex = 0; 
                         
-                        const r = pixels[idx];
-                        const g = pixels[idx+1];
-                        const b = pixels[idx+2];
+                        const r = pixels[idx], g = pixels[idx+1], b = pixels[idx+2];
                         
-                        // Mapeo de RGB a índice de color CGA (0-3) de la paleta activa
+                        // Buscar el índice de color correspondiente en la paleta
                         for(let c=0; c<paletteToUse.length; c++) {
                             const pal = paletteToUse[c];
                             if (r === pal.r && g === pal.g && b === pal.b) {
@@ -464,7 +624,7 @@ SCREEN 0
                                 break;
                             }
                         }
-                        
+                        // Empaquetar 4 píxeles (2 bits cada uno) en 1 byte
                         byteVal |= (colorIndex << (6 - (k * 2)));
                     }
                     buffer[lineStart + (x / 4)] = byteVal;
@@ -472,9 +632,6 @@ SCREEN 0
             }
             return buffer;
         }
-
-
-        // === LÓGICA BSAVE a PNG (Descompresión) ===
         
         function processBsave(buffer) {
             const data = new DataView(buffer);
@@ -490,11 +647,6 @@ SCREEN 0
 
             const EVEN_OFFSET = 7;
             const ODD_OFFSET = 7 + CGA_MEMORY_SIZE / 2;
-            
-            // NOTA: Para la descompresión, la paleta usada depende del valor almacenado 
-            // en la memoria de la CGA (registro 0x3D9). Aquí asumimos que el .BSV 
-            // se cargará en una de las dos paletas definidas. 
-            // Usamos la paleta activa seleccionada en el desplegable para la visualización.
             const paletteToUse = CGA_PALETTES[selectPalette.value];
 
             for (let y = 0; y < CGA_HEIGHT; y++) {
@@ -505,18 +657,19 @@ SCREEN 0
 
                 for (let x = 0; x < CGA_WIDTH; x += 4) {
                     const byteIndex = lineStart + (x / 4);
+                    // Asegurar que no leemos fuera del rango del buffer (aunque CGA_MEMORY_SIZE debería cubrirlo)
+                    if (byteIndex >= data.byteLength) continue; 
+
                     const byteVal = data.getUint8(byteIndex);
 
                     for (let k = 0; k < 4; k++) {
                         const colorIndex = (byteVal >> (6 - (k * 2))) & 0x03;
-                        const color = paletteToUse[colorIndex]; // Usa la paleta seleccionada
+                        const color = paletteToUse[colorIndex];
 
                         const pixelIndex = ((y * CGA_WIDTH) + (x + k)) * 4;
                         
-                        pixels[pixelIndex] = color.r;
-                        pixels[pixelIndex + 1] = color.g;
-                        pixels[pixelIndex + 2] = color.b;
-                        pixels[pixelIndex + 3] = 255; 
+                        pixels[pixelIndex] = color.r; pixels[pixelIndex + 1] = color.g;
+                        pixels[pixelIndex + 2] = color.b; pixels[pixelIndex + 3] = 255; 
                     }
                 }
             }
@@ -532,33 +685,51 @@ SCREEN 0
 
         // === CONTROLADORES DE EVENTOS ===
 
-        // Evento de cambio de archivo
+        modeRadios.forEach(radio => radio.addEventListener('change', (e) => updateMode(e.target.value)));
+
         fileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
-            if (!file) return;
+            if (!file) {
+                 status.innerText = 'Selecciona una imagen...';
+                 return;
+            }
 
             fileName = file.name.split('.')[0];
             ctxOrig.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
             ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
             currentImage = null; 
+            btnConvert.disabled = true;
 
             if (currentMode === 'pngToBsave') {
-                const img = new Image();
+                status.innerText = 'Cargando imagen...';
                 const url = URL.createObjectURL(file);
 
-                img.onload = () => {
+                // Función que devuelve una promesa para esperar la carga de la imagen
+                const loadImage = () => new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = () => reject(new Error('Error al cargar la imagen.'));
+                    img.src = url;
+                });
+                
+                try {
+                    const img = await loadImage();
                     currentImage = img; 
                     processImage(img);
                     URL.revokeObjectURL(url);
-                };
-                img.src = url;
+                } catch (error) {
+                    status.innerText = `⚠️ Error: ${error.message}`;
+                    console.error(error);
+                    URL.revokeObjectURL(url);
+                }
 
             } else if (currentMode === 'bsaveToPng') {
+                status.innerText = 'Cargando archivo BSAVE...';
                 try {
                     const buffer = await file.arrayBuffer();
                     processBsave(buffer);
                 } catch (error) {
-                    status.innerText = `Error al leer el archivo BSAVE: ${error.message}`;
+                    status.innerText = `⚠️ Error al leer el archivo BSAVE: ${error.message}`;
                     console.error(error);
                 }
             }
@@ -571,36 +742,49 @@ SCREEN 0
             }
         });
         
-        // Evento de cambio de Paleta (NUEVO)
+        // Evento de cambio de Paleta
         selectPalette.addEventListener('change', () => {
-            // Reprocesa la imagen para aplicar la nueva paleta
             if (currentMode === 'pngToBsave' && currentImage) {
                 processImage(currentImage);
-            } 
-            // O reprocesa el BSAVE para ver cómo se vería con la nueva paleta
-            else if (currentMode === 'bsaveToPng' && fileInput.files.length > 0) {
-                 // Si ya cargamos un BSAVE, lo reprocesamos para cambiar la visualización
+            } else if (currentMode === 'bsaveToPng' && fileInput.files.length > 0) {
+                 // Disparar la recarga del archivo BSAVE con la nueva paleta
                  const file = fileInput.files[0];
-                 file.arrayBuffer().then(processBsave);
+                 file.arrayBuffer().then(processBsave).catch(error => {
+                    status.innerText = `⚠️ Error al re-procesar BSAVE: ${error.message}`;
+                    console.error(error);
+                 });
             }
-            // Actualiza el bloque de código en ambos modos
             updateCodeBlock(selectPalette.value);
+        });
+        
+        // Evento de cambio de Dithering
+        selectDithering.addEventListener('change', () => {
+            if (currentMode === 'pngToBsave' && currentImage) {
+                processImage(currentImage);
+            }
         });
 
 
         // === CONTROLADOR DE DESCARGA ===
         btnConvert.addEventListener('click', () => {
+            if (btnConvert.disabled) return;
+            
             if (currentMode === 'pngToBsave') {
-                const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
-                const buffer = generateBsave(imgData.data);
-                
-                const blob = new Blob([buffer], { type: "application/octet-stream" });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = fileName + "_CGA.BSV";
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                try {
+                    const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
+                    const buffer = generateBsave(imgData.data);
+                    
+                    const blob = new Blob([buffer], { type: "application/octet-stream" });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = fileName + "_CGA.BSV";
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } catch(e) {
+                    status.innerText = `⚠️ Error al generar BSAVE: ${e.message}`;
+                    console.error("BSAVE Generation Error:", e);
+                }
             } else if (currentMode === 'bsaveToPng') {
                 const link = document.createElement('a');
                 link.download = fileName + "_CGA.png";
