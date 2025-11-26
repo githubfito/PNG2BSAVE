@@ -1,78 +1,616 @@
-SUB ScrollLeftPixelDefinitivo (FondoByte AS BYTE)
-    
-    DIM ODD_SEGMENT AS WORD   ' B800h + 2000h = BA00h
-    DIM X AS INTEGER
-    DIM CurrentByte AS BYTE, NextByte AS BYTE
-    DIM NextPixelTemp AS WORD 
-    DIM FinalByte AS BYTE
-    DIM LastByte AS BYTE
-    
-    ' Calcular el segmento de inicio de las líneas impares:
-    ' &HB800 + &H2000 = &HBA00
-    ODD_SEGMENT = &HBA00 
-    
-    ' ---------------------------------------------
-    ' 1. SCROLL DE LÍNEAS PARES (Y = 0, 2, 4, ...)
-    ' ---------------------------------------------
-    DEF SEG = &HB800 ' Segmento inicial
-
-    FOR Y = 0 TO 198 STEP 2 ' Itera solo sobre las líneas pares
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Conversor PNG ↔ BSAVE (CGA)</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #1a1a1a;
+            color: #0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        h1 { text-shadow: 2px 2px #000; margin-bottom: 10px; }
         
-        ' El desplazamiento (TargetOffset) es simplemente la posición X * LINE_BYTES,
-        ' pero como el código se ejecuta en PowerBasic, trabajamos con offsets (0-79)
+        .main-container {
+            background: #333;
+            padding: 20px;
+            border: 2px solid #555;
+            border-radius: 8px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
 
-        FOR X = 0 TO 78 ' Byte 0 a Byte 78
-            
-            ' La dirección aquí es 0 (BaseOffset) + Desplazamiento X + (Y/2 * 80)
-            ' ¡CRÍTICO! Necesitamos el offset dentro del bloque de 8K.
-            ' El CGA entrelaza en hardware, el offset es solo el X.
-            
-            CurrentByte = PEEK(X)
-            NextByte = PEEK(X + 1)
+        /* 1. Selección de Modo */
+        .mode-selection {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 10px;
+            border-bottom: 1px dashed #777;
+            padding-bottom: 15px;
+        }
 
-            ' Manipulación de Bits (Scroll de 1 píxel)
-            FinalByte = CurrentByte
-            SHIFT LEFT FinalByte, 2 
-            NextPixelTemp = NextByte : SHIFT RIGHT NextPixelTemp, 6 
-            FinalByte = FinalByte OR NextPixelTemp
-            
-            POKE X, FinalByte
-        NEXT X
+        .mode-selection input[type="radio"] { display: none; }
+        .mode-selection label {
+            padding: 8px 15px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        .mode-selection input[type="radio"]:checked + label {
+            background-color: #aa00aa;
+            border-color: #ff55ff;
+            color: #fff;
+        }
+        .mode-selection label:hover:not(.mode-selection input[type="radio"]:checked + label) {
+            background-color: #444;
+        }
         
-        ' Manejar el último byte (X=79)
-        LastByte = PEEK(79)
-        NextPixelTemp = LastByte : SHIFT LEFT NextPixelTemp, 2
-        LastByte = NextPixelTemp OR FondoByte 
-        POKE 79, LastByte
-    NEXT Y
+        /* 2. Controles de Archivo (Ahora arriba) */
+        .controls {
+            padding-bottom: 10px;
+        }
 
-    ' ---------------------------------------------
-    ' 2. SCROLL DE LÍNEAS IMPARES (Y = 1, 3, 5, ...)
-    ' ---------------------------------------------
-    DEF SEG = ODD_SEGMENT ' Cambiar al segmento &HBA00
-
-    FOR Y = 1 TO 199 STEP 2 ' Itera solo sobre las líneas impares
-        ' Dentro de este segmento, el offset vuelve a ser 0.
+        .settings-row {
+            margin-top: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            font-size: 0.9em;
+        }
         
-        FOR X = 0 TO 78 ' Byte 0 a Byte 78
-            
-            CurrentByte = PEEK(X)
-            NextByte = PEEK(X + 1)
+        /* Estilo para el desplegable y etiquetas */
+        select {
+            background-color: #555;
+            color: #0f0;
+            border: 1px solid #777;
+            padding: 5px;
+            border-radius: 3px;
+            font-family: inherit;
+        }
+        .settings-row label {
+            color: #ccc;
+        }
 
-            ' Manipulación de Bits
-            FinalByte = CurrentByte
-            SHIFT LEFT FinalByte, 2 
-            NextPixelTemp = NextByte : SHIFT RIGHT NextPixelTemp, 6 
-            FinalByte = FinalByte OR NextPixelTemp
-            
-            POKE X, FinalByte
-        NEXT X
+
+        button {
+            background-color: #aa00aa; 
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 18px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #ff55ff; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+
+        /* 3. Lienzos */
+        .canvas-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            padding-top: 10px; 
+            border-top: 1px dashed #777;
+        }
         
-        ' Manejar el último byte (X=79)
-        LastByte = PEEK(79)
-        NextPixelTemp = LastByte : SHIFT LEFT NextPixelTemp, 2
-        LastByte = NextPixelTemp OR FondoByte 
-        POKE 79, LastByte
-    NEXT Y
+        .canvas-label {
+            background: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #fff;
+        }
 
-END SUB
+        canvas {
+            border: 4px solid #fff;
+            image-rendering: pixelated;
+            width: 640px; 
+            height: 400px;
+            background: #000;
+        }
+
+        .code-block {
+            background: #000;
+            border: 1px solid #444;
+            padding: 15px;
+            text-align: left;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 600px;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>PNG ↔ BSAVE (CGA SCREEN 1)</h1>
+
+    <div class="main-container">
+
+        <div class="mode-selection">
+            <input type="radio" id="modePngToBsave" name="conversionMode" value="pngToBsave" checked>
+            <label for="modePngToBsave">1) 🖼️ PNG a .BSV</label>
+
+            <input type="radio" id="modeBsaveToPng" name="conversionMode" value="bsaveToPng">
+            <label for="modeBsaveToPng">2) 💾 .BSV a PNG</label>
+        </div>
+        
+        <div class="controls">
+            <input type="file" id="fileInput" accept="image/*, .bsv">
+            <div id="pngSettings" class="settings-row">
+                <input type="checkbox" id="chkResize" checked>
+                <label for="chkResize">Adaptar a 320x200 (Estirar)</label>
+                
+                <label for="selectPalette">Paleta CGA:</label>
+                <select id="selectPalette">
+                    <option value="palette1">Paleta 1 (Cian, Magenta, Blanco)</option>
+                    <option value="palette2">Paleta 2 (Verde, Rojo, Marrón)</option>
+                </select>
+            </div>
+            <p id="status" style="color:#aaa">Selecciona una imagen...</p>
+            <button id="btnConvert" disabled>💾 Descargar .BSV</button>
+        </div>
+
+
+        <div id="canvasPngToBsave" class="canvas-wrapper">
+            <span class="canvas-label" id="originalCanvasLabel">Original (Redimensionado)</span>
+            <canvas id="canvasOriginal" width="320" height="200"></canvas>
+        </div>
+
+        <div class="canvas-wrapper">
+            <span class="canvas-label" id="cgaCanvasLabel">CGA 4 Colores (Dithering Floyd-Steinberg)</span>
+            <canvas id="canvasCGA" width="320" height="200"></canvas>
+        </div>
+
+    </div>
+
+    <div class="code-block">
+        <strong>Código PowerBASIC 3.5 para carga:</strong>
+<pre style="color: #ccc; margin:0;">
+SCREEN 1
+COLOR 0, 1  ' Ejemplo para Paleta 1 (Fondo Negro, Paleta 1)
+DEF SEG = &HB800
+BLOAD "IMAGEN.BSV", 0
+DEF SEG
+WAITKEY$
+SCREEN 0
+</pre>
+    </div>
+
+    <script>
+        // === DEFINICIONES DE PALETAS CGA ===
+        const CGA_PALETTES = {
+            // Negro siempre es el índice 0 para el fondo (COLOR 0, X)
+            palette1: [
+                { r: 0,   g: 0,   b: 0, index: 0 },    // 0: Negro (Default Background)
+                { r: 85,  g: 255, b: 255, index: 1 }, // 1: Cian (High Intensity)
+                { r: 255, g: 85,  b: 255, index: 2 }, // 2: Magenta (High Intensity)
+                { r: 255, g: 255, b: 255, index: 3 }  // 3: Blanco (High Intensity)
+            ],
+            // Paleta del bit de intensidad bajo (Low Intensity)
+            palette2: [ 
+                { r: 0,   g: 0,   b: 0, index: 0 },    // 0: Negro (Default Background)
+                { r: 85,  g: 255, b: 85, index: 1 },  // 1: Verde (Low Intensity)
+                { r: 255, g: 85,  b: 85, index: 2 },  // 2: Rojo (Low Intensity)
+                { r: 255, g: 255, b: 85, index: 3 }   // 3: Marrón/Amarillo Oscuro (Low Intensity)
+            ]
+        };
+        const CGA_WIDTH = 320;
+        const CGA_HEIGHT = 200;
+        const CGA_MEMORY_SIZE = 16384; 
+
+        // === ESTADO GLOBAL ===
+        let currentMode = 'pngToBsave';
+        let fileName = "imagen";
+        let currentImage = null; 
+
+        // === ELEMENTOS DEL DOM ===
+        const fileInput = document.getElementById('fileInput');
+        const btnConvert = document.getElementById('btnConvert');
+        const status = document.getElementById('status');
+        const modeRadios = document.querySelectorAll('input[name="conversionMode"]');
+        const chkResize = document.getElementById('chkResize');
+        const pngSettingsDiv = document.getElementById('pngSettings');
+        const selectPalette = document.getElementById('selectPalette'); // NUEVO
+
+        const canvasOriginal = document.getElementById('canvasOriginal');
+        const canvasCGA = document.getElementById('canvasCGA');
+        const ctxOrig = canvasOriginal.getContext('2d');
+        const ctxCGA = canvasCGA.getContext('2d', { willReadFrequently: true });
+        const canvasPngToBsaveDiv = document.getElementById('canvasPngToBsave');
+        const originalCanvasLabel = document.getElementById('originalCanvasLabel');
+        const cgaCanvasLabel = document.getElementById('cgaCanvasLabel');
+        
+        // Inicializa la paleta activa
+        let activePalette = CGA_PALETTES[selectPalette.value];
+
+
+        // === UTILIDADES ===
+
+        function getClosestColorIndex(r, g, b, palette) {
+            let minDiff = Infinity;
+            let closest = 0;
+            palette.forEach((col, index) => {
+                // Cálculo de distancia euclidiana en RGB
+                const diff = (r - col.r)**2 + (g - col.g)**2 + (b - col.b)**2;
+                if (diff < minDiff) { minDiff = diff; closest = index; }
+            });
+            return closest;
+        }
+
+        function clamp(value) {
+            return Math.max(0, Math.min(255, value));
+        }
+
+        function calculateFitDimensions(imgW, imgH, targetW, targetH) {
+            const ratioW = targetW / imgW;
+            const ratioH = targetH / imgH;
+            const ratio = Math.min(ratioW, ratioH); 
+
+            const newW = imgW * ratio;
+            const newH = imgH * ratio;
+
+            const offsetX = (targetW - newW) / 2;
+            const offsetY = (targetH - newH) / 2;
+
+            return { newW: newW, newH: newH, offsetX: offsetX, offsetY: offsetY };
+        }
+
+        // Función para actualizar el texto de la previsualización del código
+        function updateCodeBlock(paletteKey) {
+            const codeBlock = document.querySelector('.code-block pre');
+            let colorSetting = '';
+            
+            if (paletteKey === 'palette1') {
+                colorSetting = 'COLOR 0, 1  \' Fondo Negro, Paleta 1 (Cian, Magenta, Blanco)';
+            } else if (paletteKey === 'palette2') {
+                colorSetting = 'COLOR 0, 0  \' Fondo Negro, Paleta 0 (Verde, Rojo, Marrón)';
+            } else {
+                 // Esto no debería pasar, pero como fallback
+                colorSetting = 'COLOR 0, 1  \' Fondo Negro, Paleta 1';
+            }
+
+            codeBlock.innerHTML = `
+SCREEN 1
+${colorSetting}
+DEF SEG = &HB800
+BLOAD "IMAGEN.BSV", 0
+DEF SEG
+WAITKEY$
+SCREEN 0
+`.trim();
+        }
+
+        // === CAMBIO DE MODO ===
+        function updateMode(mode) {
+            currentMode = mode;
+            fileInput.value = ''; 
+            btnConvert.disabled = true;
+            ctxOrig.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            currentImage = null; 
+            
+            // Refrescar la paleta activa en caso de que se haya cambiado
+            activePalette = CGA_PALETTES[selectPalette.value];
+
+            if (mode === 'pngToBsave') {
+                fileInput.accept = 'image/*';
+                pngSettingsDiv.style.display = 'flex'; 
+                canvasPngToBsaveDiv.style.display = 'flex'; 
+                originalCanvasLabel.innerText = 'Original (Redimensionado)';
+                cgaCanvasLabel.innerText = 'CGA 4 Colores (Dithering Floyd-Steinberg)';
+                btnConvert.innerText = '💾 Descargar .BSV';
+                status.innerText = 'Selecciona una imagen PNG o JPG...';
+            } else {
+                fileInput.accept = '.bsv';
+                pngSettingsDiv.style.display = 'none'; 
+                canvasPngToBsaveDiv.style.display = 'flex'; 
+                originalCanvasLabel.innerText = 'Previsualización 1 (Desde BSAVE)';
+                cgaCanvasLabel.innerText = 'Previsualización 2 (Desde BSAVE)';
+                btnConvert.innerText = '🖼️ Descargar PNG';
+                status.innerText = 'Selecciona un archivo .BSV (Formato CGA SCREEN 1)...';
+            }
+
+            updateCodeBlock(selectPalette.value); // Actualiza el bloque de código
+        }
+        modeRadios.forEach(radio => radio.addEventListener('change', (e) => updateMode(e.target.value)));
+        
+
+
+        // === LÓGICA PNG a BSAVE: Dithering y Conversión ===
+        function applyFloydSteinberg(data, palette) {
+            const width = CGA_WIDTH;
+            const height = CGA_HEIGHT;
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = (y * width + x) * 4;
+
+                    const oldR = data[i];
+                    const oldG = data[i + 1];
+                    const oldB = data[i + 2];
+
+                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); // Usa la paleta activa
+                    const newColor = palette[closestIdx];
+
+                    data[i] = newColor.r;
+                    data[i + 1] = newColor.g;
+                    data[i + 2] = newColor.b;
+
+                    const errR = oldR - newColor.r;
+                    const errG = oldG - newColor.g;
+                    const errB = oldB - newColor.b;
+
+                    distributeError(data, x + 1, y, errR, errG, errB, 7 / 16);
+                    distributeError(data, x - 1, y + 1, errR, errG, errB, 3 / 16);
+                    distributeError(data, x, y + 1, errR, errG, errB, 5 / 16);
+                    distributeError(data, x + 1, y + 1, errR, errG, errB, 1 / 16);
+                }
+            }
+        }
+        
+        // Función principal de procesamiento de imagen PNG
+        function processImage(img) {
+            if (currentMode !== 'pngToBsave') return; 
+
+            btnConvert.disabled = true;
+            status.innerText = "Procesando...";
+            activePalette = CGA_PALETTES[selectPalette.value]; // Asegurar que usamos la paleta seleccionada
+
+            // 1. Limpiar lienzos y dibujar fondo negro (0, 0, 0)
+            ctxOrig.fillStyle = 'black';
+            ctxOrig.fillRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            ctxCGA.fillStyle = 'black';
+            ctxCGA.fillRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+
+            const adaptChecked = chkResize.checked;
+            let drawX, drawY, drawW, drawH;
+            
+            if (adaptChecked) {
+                // Modo Estirar/Comprimir a 320x200
+                drawX = 0;
+                drawY = 0;
+                drawW = CGA_WIDTH;
+                drawH = CGA_HEIGHT;
+                originalCanvasLabel.innerText = 'Original (Estirado 320x200)';
+            } else {
+                // Modo Ajustar manteniendo Aspect Ratio
+                const fit = calculateFitDimensions(img.width, img.height, CGA_WIDTH, CGA_HEIGHT);
+                drawW = fit.newW;
+                drawH = fit.newH;
+                drawX = fit.offsetX;
+                drawY = fit.offsetY;
+                originalCanvasLabel.innerText = 'Original (Ajustado A.R.)';
+            }
+
+            // 2. Dibujar imagen redimensionada
+            ctxOrig.drawImage(img, drawX, drawY, drawW, drawH);
+            ctxCGA.drawImage(img, drawX, drawY, drawW, drawH);
+            
+            // 3. Aplicar Dithering CGA
+            setTimeout(() => {
+                const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
+                applyFloydSteinberg(imgData.data, activePalette); // Pasa la paleta activa
+                ctxCGA.putImageData(imgData, 0, 0);
+                btnConvert.disabled = false;
+                status.innerText = "✅ Conversión lista. Compara las imágenes.";
+            }, 50); 
+            
+            updateCodeBlock(selectPalette.value);
+        }
+
+        // Lógica de error (mantiene el mismo código)
+        function distributeError(data, x, y, errR, errG, errB, factor) {
+            if (x < 0 || x >= CGA_WIDTH || y >= CGA_HEIGHT) return;
+            const i = (y * CGA_WIDTH + x) * 4;
+            
+            data[i] = clamp(data[i] + errR * factor);
+            data[i+1] = clamp(data[i+1] + errG * factor);
+            data[i+2] = clamp(data[i+2] + errB * factor);
+        }
+
+        function generateBsave(pixels) {
+            const buffer = new Uint8Array(7 + CGA_MEMORY_SIZE);
+            const view = new DataView(buffer.buffer);
+
+            // Header BSAVE
+            view.setUint8(0, 0xFD);
+            view.setUint16(1, 0x0000, true); 
+            view.setUint16(3, 0xB800, true); 
+            view.setUint16(5, CGA_MEMORY_SIZE, true); 
+
+            const EVEN_OFFSET = 7;
+            const ODD_OFFSET = 7 + CGA_MEMORY_SIZE / 2; 
+
+            // Usamos la paleta activa para el mapeo
+            const paletteToUse = CGA_PALETTES[selectPalette.value];
+
+            for (let y = 0; y < CGA_HEIGHT; y++) {
+                const isOdd = (y % 2 !== 0);
+                const lineIndex = Math.floor(y / 2); 
+                const baseOffset = isOdd ? ODD_OFFSET : EVEN_OFFSET;
+                const lineStart = baseOffset + (lineIndex * 80); 
+
+                for (let x = 0; x < CGA_WIDTH; x += 4) {
+                    let byteVal = 0;
+                    for (let k = 0; k < 4; k++) {
+                        const pixelX = x + k;
+                        const idx = ((y * CGA_WIDTH) + pixelX) * 4;
+                        
+                        let colorIndex = 0; 
+                        
+                        const r = pixels[idx];
+                        const g = pixels[idx+1];
+                        const b = pixels[idx+2];
+                        
+                        // Mapeo de RGB a índice de color CGA (0-3) de la paleta activa
+                        for(let c=0; c<paletteToUse.length; c++) {
+                            const pal = paletteToUse[c];
+                            if (r === pal.r && g === pal.g && b === pal.b) {
+                                colorIndex = pal.index;
+                                break;
+                            }
+                        }
+                        
+                        byteVal |= (colorIndex << (6 - (k * 2)));
+                    }
+                    buffer[lineStart + (x / 4)] = byteVal;
+                }
+            }
+            return buffer;
+        }
+
+
+        // === LÓGICA BSAVE a PNG (Descompresión) ===
+        
+        function processBsave(buffer) {
+            const data = new DataView(buffer);
+
+            if (data.getUint8(0) !== 0xFD) {
+                status.innerText = "Error: Archivo no parece ser un formato BSAVE válido (Cabecera 0xFD).";
+                btnConvert.disabled = true;
+                return;
+            }
+
+            const imgData = ctxCGA.createImageData(CGA_WIDTH, CGA_HEIGHT);
+            const pixels = imgData.data;
+
+            const EVEN_OFFSET = 7;
+            const ODD_OFFSET = 7 + CGA_MEMORY_SIZE / 2;
+            
+            // NOTA: Para la descompresión, la paleta usada depende del valor almacenado 
+            // en la memoria de la CGA (registro 0x3D9). Aquí asumimos que el .BSV 
+            // se cargará en una de las dos paletas definidas. 
+            // Usamos la paleta activa seleccionada en el desplegable para la visualización.
+            const paletteToUse = CGA_PALETTES[selectPalette.value];
+
+            for (let y = 0; y < CGA_HEIGHT; y++) {
+                const isOdd = (y % 2 !== 0);
+                const lineIndex = Math.floor(y / 2);
+                const baseOffset = isOdd ? ODD_OFFSET : EVEN_OFFSET;
+                const lineStart = baseOffset + (lineIndex * 80);
+
+                for (let x = 0; x < CGA_WIDTH; x += 4) {
+                    const byteIndex = lineStart + (x / 4);
+                    const byteVal = data.getUint8(byteIndex);
+
+                    for (let k = 0; k < 4; k++) {
+                        const colorIndex = (byteVal >> (6 - (k * 2))) & 0x03;
+                        const color = paletteToUse[colorIndex]; // Usa la paleta seleccionada
+
+                        const pixelIndex = ((y * CGA_WIDTH) + (x + k)) * 4;
+                        
+                        pixels[pixelIndex] = color.r;
+                        pixels[pixelIndex + 1] = color.g;
+                        pixels[pixelIndex + 2] = color.b;
+                        pixels[pixelIndex + 3] = 255; 
+                    }
+                }
+            }
+            
+            ctxCGA.putImageData(imgData, 0, 0);
+            ctxOrig.putImageData(imgData, 0, 0); 
+            
+            btnConvert.disabled = false;
+            status.innerText = `✅ Conversión lista. Descarga el PNG de ${CGA_WIDTH}x${CGA_HEIGHT}.`;
+            updateCodeBlock(selectPalette.value);
+        }
+
+
+        // === CONTROLADORES DE EVENTOS ===
+
+        // Evento de cambio de archivo
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            fileName = file.name.split('.')[0];
+            ctxOrig.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            currentImage = null; 
+
+            if (currentMode === 'pngToBsave') {
+                const img = new Image();
+                const url = URL.createObjectURL(file);
+
+                img.onload = () => {
+                    currentImage = img; 
+                    processImage(img);
+                    URL.revokeObjectURL(url);
+                };
+                img.src = url;
+
+            } else if (currentMode === 'bsaveToPng') {
+                try {
+                    const buffer = await file.arrayBuffer();
+                    processBsave(buffer);
+                } catch (error) {
+                    status.innerText = `Error al leer el archivo BSAVE: ${error.message}`;
+                    console.error(error);
+                }
+            }
+        });
+
+        // Evento de cambio de Checkbox (Redimensionamiento)
+        chkResize.addEventListener('change', () => {
+            if (currentMode === 'pngToBsave' && currentImage) {
+                processImage(currentImage);
+            }
+        });
+        
+        // Evento de cambio de Paleta (NUEVO)
+        selectPalette.addEventListener('change', () => {
+            // Reprocesa la imagen para aplicar la nueva paleta
+            if (currentMode === 'pngToBsave' && currentImage) {
+                processImage(currentImage);
+            } 
+            // O reprocesa el BSAVE para ver cómo se vería con la nueva paleta
+            else if (currentMode === 'bsaveToPng' && fileInput.files.length > 0) {
+                 // Si ya cargamos un BSAVE, lo reprocesamos para cambiar la visualización
+                 const file = fileInput.files[0];
+                 file.arrayBuffer().then(processBsave);
+            }
+            // Actualiza el bloque de código en ambos modos
+            updateCodeBlock(selectPalette.value);
+        });
+
+
+        // === CONTROLADOR DE DESCARGA ===
+        btnConvert.addEventListener('click', () => {
+            if (currentMode === 'pngToBsave') {
+                const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
+                const buffer = generateBsave(imgData.data);
+                
+                const blob = new Blob([buffer], { type: "application/octet-stream" });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fileName + "_CGA.BSV";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else if (currentMode === 'bsaveToPng') {
+                const link = document.createElement('a');
+                link.download = fileName + "_CGA.png";
+                link.href = canvasCGA.toDataURL('image/png');
+                link.click();
+            }
+        });
+        
+        // Inicialización
+        updateMode(currentMode); 
+    </script>
+</body>
+</html>
