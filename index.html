@@ -13,7 +13,38 @@
             align-items: center;
             padding: 20px;
         }
-        h1 { text-shadow: 2px 2px #000; margin-bottom: 10px; }
+
+        /* 1. Nuevo contenedor de cabecera */
+        .page-header {
+            width: 100%;
+            max-width: 700px; /* Asegura que la cabecera no se estire demasiado */
+            position: relative;
+            text-align: center;
+            margin-bottom: 20px; 
+        }
+        
+        h1 { 
+            text-shadow: 2px 2px #000; 
+            margin-bottom: 0px; /* Cambiado de 10px a 0px */
+        }
+
+        /* 2. Estilo para el texto de atribución */
+        .attribution {
+            position: absolute;
+            top: 5px; 
+            right: 0; 
+            font-size: 0.75em; 
+            color: #555; 
+        }
+
+        .attribution a {
+            color: #ff55ff; 
+            text-decoration: none;
+        }
+
+        .attribution a:hover {
+            text-decoration: underline;
+        }
         
         .main-container {
             background: #333;
@@ -136,7 +167,12 @@
 </head>
 <body>
 
-    <h1>PNG ↔ BSAVE (CGA SCREEN 1)</h1>
+    <header class="page-header">
+        <h1>PNG ↔ BSAVE (CGA SCREEN 1)</h1>
+        <div class="attribution">
+            by <a href="https://github.com/githubfito" target="_blank">fitosoft</a>
+        </div>
+    </header>
 
     <div class="main-container">
 
@@ -194,7 +230,7 @@ COLOR 0, 1  ' Ejemplo para Paleta 1 (Fondo Negro, Paleta 1)
 DEF SEG = &HB800
 BLOAD "IMAGEN.BSV", 0
 DEF SEG
-WAITKEY$
+A$ = INPUT$(1)
 SCREEN 0
 </pre>
     </div>
@@ -302,7 +338,7 @@ ${colorSetting}
 DEF SEG = &HB800
 BLOAD "IMAGEN.BSV", 0
 DEF SEG
-WAITKEY$
+A$ = INPUT$(1)
 SCREEN 0
 `.trim();
         }
