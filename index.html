@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Conversor PNG ↔ BSAVE (CGA)</title>
+    <title>Conversor Gráfico Retro (CGA/Spectrum)</title>
     <style>
         body {
             font-family: 'Courier New', Courier, monospace;
@@ -14,10 +14,9 @@
             padding: 20px;
         }
 
-        /* 1. Nuevo contenedor de cabecera */
         .page-header {
             width: 100%;
-            max-width: 700px; /* Asegura que la cabecera no se estire demasiado */
+            max-width: 700px; 
             position: relative;
             text-align: center;
             margin-bottom: 20px; 
@@ -25,10 +24,9 @@
         
         h1 { 
             text-shadow: 2px 2px #000; 
-            margin-bottom: 0px; /* Cambiado de 10px a 0px */
+            margin-bottom: 0px; 
         }
 
-        /* 2. Estilo para el texto de atribución */
         .attribution {
             position: absolute;
             top: 5px; 
@@ -57,7 +55,6 @@
             gap: 20px;
         }
 
-        /* 1. Selección de Modo */
         .mode-selection {
             display: flex;
             justify-content: center;
@@ -65,6 +62,7 @@
             margin-bottom: 10px;
             border-bottom: 1px dashed #777;
             padding-bottom: 15px;
+            flex-wrap: wrap; 
         }
 
         .mode-selection input[type="radio"] { display: none; }
@@ -85,7 +83,6 @@
             background-color: #444;
         }
         
-        /* 2. Controles de Archivo (Ahora arriba) */
         .controls {
             padding-bottom: 10px;
         }
@@ -127,7 +124,6 @@
         button:hover { background-color: #ff55ff; }
         button:disabled { background-color: #555; cursor: not-allowed; }
 
-        /* 3. Lienzos */
         .canvas-wrapper {
             display: flex;
             flex-direction: column;
@@ -148,10 +144,18 @@
         canvas {
             border: 4px solid #fff;
             image-rendering: pixelated;
+            max-width: 640px; 
+            max-height: 400px;
             width: 640px; 
             height: 400px;
             background: #000;
         }
+
+        .canvas-spectrum {
+             width: 512px; /* 256x2 */
+             height: 384px; /* 192x2 */
+        }
+
 
         .code-block {
             background: #000;
@@ -168,7 +172,7 @@
 <body>
 
     <header class="page-header">
-        <h1>PNG ↔ BSAVE (CGA SCREEN 1)</h1>
+        <h1>PNG ↔ BSAVE/SCR (CGA/Spectrum)</h1>
         <div class="attribution">
             by <a href="https://github.com/githubfito" target="_blank">fitosoft</a>
         </div>
@@ -177,16 +181,20 @@
     <div class="main-container">
 
         <div class="mode-selection">
-            <input type="radio" id="modePngToBsave" name="conversionMode" value="pngToBsave" checked>
-            <label for="modePngToBsave">1) 🖼️ PNG a .BSV</label>
+            <input type="radio" id="modePngToBsave" name="conversionMode" value="pngToBsave">
+            <label for="modePngToBsave">1) 🖼️ PNG a .BSV (CGA)</label>
 
             <input type="radio" id="modeBsaveToPng" name="conversionMode" value="bsaveToPng">
-            <label for="modeBsaveToPng">2) 💾 .BSV a PNG</label>
+            <label for="modeBsaveToPng">2) 💾 .BSV a PNG (CGA)</label>
+            
+            <input type="radio" id="modePngToSpectrum" name="conversionMode" value="pngToSpectrum" checked>
+            <label for="modePngToSpectrum">3) 👾 PNG a .SCR (Spectrum)</label>
         </div>
         
         <div class="controls">
-            <input type="file" id="fileInput" accept="image/*, .bsv">
-            <div id="pngSettings" class="settings-row">
+            <input type="file" id="fileInput" accept="image/*, .bsv, .scr">
+            
+            <div id="pngSettings" class="settings-row" style="display:none;">
                 <input type="checkbox" id="chkResize" checked>
                 <label for="chkResize">Adaptar a 320x200 (Estirar)</label>
                 
@@ -194,6 +202,7 @@
                 <select id="selectPalette">
                     <option value="palette1">Paleta 1 (Cian, Magenta, Blanco)</option>
                     <option value="palette2">Paleta 2 (Verde, Rojo, Marrón)</option>
+                    <option value="spectrum">Paleta Spectrum (15 colores)</option>
                 </select>
                 
                 <label for="selectDithering">Dithering:</label>
@@ -205,38 +214,72 @@
                     <option value="none">Ninguno (Umbral Fijo)</option>
                 </select>
             </div>
+            
+            <div id="spectrumSettings" class="settings-row">
+                <input type="checkbox" id="chkResizeSpectrum" checked>
+                <label for="chkResizeSpectrum">Adaptar a 256x192 (Estirar)</label>
+                
+                <input type="checkbox" id="chkMonochrome">
+                <label for="chkMonochrome">Forzar Monocromo (Blanco/Negro)</label>
+            </div>
+            
             <p id="status" style="color:#aaa">Selecciona una imagen...</p>
-            <button id="btnConvert" disabled>💾 Descargar .BSV</button>
+            <button id="btnConvert" disabled>💾 Descargar .SCR</button>
         </div>
 
 
-        <div id="canvasPngToBsave" class="canvas-wrapper">
+        <div id="canvasOriginalWrapper" class="canvas-wrapper">
             <span class="canvas-label" id="originalCanvasLabel">Original (Redimensionado)</span>
-            <canvas id="canvasOriginal" width="320" height="200"></canvas>
+            <canvas id="canvasOriginal" width="256" height="192" class="canvas-spectrum"></canvas>
         </div>
 
         <div class="canvas-wrapper">
-            <span class="canvas-label" id="cgaCanvasLabel">CGA 4 Colores (Dithering)</span>
-            <canvas id="canvasCGA" width="320" height="200"></canvas>
+            <span class="canvas-label" id="cgaCanvasLabel">Spectrum 15 Colores (Dithering)</span>
+            <canvas id="canvasCGA" width="256" height="192" class="canvas-spectrum"></canvas>
         </div>
 
     </div>
 
     <div class="code-block">
-        <strong>Código PowerBASIC 3.5 para carga:</strong>
-<pre style="color: #ccc; margin:0;">
-SCREEN 1
-COLOR 0, 1  ' Ejemplo para Paleta 1 (Fondo Negro, Paleta 1)
-DEF SEG = &HB800
-BLOAD "IMAGEN.BSV", 0
-DEF SEG
-A$ = INPUT$(1)
-SCREEN 0
+        <strong>Código de Carga (ZX Spectrum BASIC):</strong>
+<pre id="codeSnippet" style="color: #ccc; margin:0;">
+REM Código BASIC para ZX Spectrum
+10 CLEAR 30000: REM Reserva de memoria
+20 LOAD ""SCREEN$ FROM "IMAGEN.SCR"
+30 PAUSE 0
 </pre>
     </div>
 
     <script>
         // === DEFINICIONES Y CONSTANTES ===
+        const CGA_WIDTH = 320;
+        const CGA_HEIGHT = 200;
+        const CGA_MEMORY_SIZE = 16384; 
+        
+        const SPEC_WIDTH = 256;
+        const SPEC_HEIGHT = 192;
+        const SPEC_SCREEN_SIZE = 6912; // 6144 (pixels) + 768 (atributos)
+        
+        const ZX_SPECTRUM_PALETTE = [
+            { r: 0x00, g: 0x00, b: 0x00, index: 0 }, // Black
+            { r: 0x00, g: 0x00, b: 0xD7, index: 1 }, // Blue
+            { r: 0xD7, g: 0x00, b: 0x00, index: 2 }, // Red
+            { r: 0xD7, g: 0x00, b: 0xD7, index: 3 }, // Magenta
+            { r: 0x00, g: 0xD7, b: 0x00, index: 4 }, // Green
+            { r: 0x00, g: 0xD7, b: 0xD7, index: 5 }, // Cyan
+            { r: 0xD7, g: 0xD7, b: 0x00, index: 6 }, // Yellow
+            { r: 0xD7, g: 0xD7, b: 0xD7, index: 7 }, // White
+            // Bright Colors (index 8-15)
+            { r: 0x00, g: 0x00, b: 0x00, index: 8 }, // Bright Black (Same as 0)
+            { r: 0x00, g: 0x00, b: 0xFF, index: 9 }, // Bright Blue
+            { r: 0xFF, g: 0x00, b: 0x00, index: 10},// Bright Red
+            { r: 0xFF, g: 0x00, b: 0xFF, index: 11},// Bright Magenta
+            { r: 0x00, g: 0xFF, b: 0x00, index: 12},// Bright Green
+            { r: 0x00, g: 0xFF, b: 0xFF, index: 13},// Bright Cyan
+            { r: 0xFF, g: 0xFF, b: 0x00, index: 14},// Bright Yellow
+            { r: 0xFF, g: 0xFF, b: 0xFF, index: 15} // Bright White
+        ];
+        
         const CGA_PALETTES = {
             palette1: [
                 { r: 0,   g: 0,   b: 0, index: 0 },
@@ -249,13 +292,10 @@ SCREEN 0
                 { r: 85,  g: 255, b: 85, index: 1 }, 
                 { r: 255, g: 85,  b: 85, index: 2 },  
                 { r: 255, g: 255, b: 85, index: 3 }
-            ]
+            ],
+            spectrum: ZX_SPECTRUM_PALETTE
         };
-        const CGA_WIDTH = 320;
-        const CGA_HEIGHT = 200;
-        const CGA_MEMORY_SIZE = 16384; 
         
-        // Matriz de Bayer 4x4
         const BAYER_MATRIX = [
             [0, 8, 2, 10],
             [12, 4, 14, 6],
@@ -263,10 +303,10 @@ SCREEN 0
             [15, 7, 13, 5]
         ];
         const BAYER_SIZE = 4;
-        const BAYER_DIVISOR = BAYER_SIZE * BAYER_SIZE; // 16
+        const BAYER_DIVISOR = BAYER_SIZE * BAYER_SIZE;
 
         // === ESTADO GLOBAL ===
-        let currentMode = 'pngToBsave';
+        let currentMode = 'pngToSpectrum';
         let fileName = "imagen";
         let currentImage = null; 
 
@@ -275,29 +315,33 @@ SCREEN 0
         const btnConvert = document.getElementById('btnConvert');
         const status = document.getElementById('status');
         const modeRadios = document.querySelectorAll('input[name="conversionMode"]');
-        const chkResize = document.getElementById('chkResize');
+        
         const pngSettingsDiv = document.getElementById('pngSettings');
+        const chkResize = document.getElementById('chkResize');
         const selectPalette = document.getElementById('selectPalette'); 
         const selectDithering = document.getElementById('selectDithering'); 
+        
+        const spectrumSettingsDiv = document.getElementById('spectrumSettings');
+        const chkResizeSpectrum = document.getElementById('chkResizeSpectrum');
+        const chkMonochrome = document.getElementById('chkMonochrome'); 
 
         const canvasOriginal = document.getElementById('canvasOriginal');
         const canvasCGA = document.getElementById('canvasCGA');
         const ctxOrig = canvasOriginal.getContext('2d');
         const ctxCGA = canvasCGA.getContext('2d', { willReadFrequently: true });
-        const canvasPngToBsaveDiv = document.getElementById('canvasPngToBsave');
         const originalCanvasLabel = document.getElementById('originalCanvasLabel');
         const cgaCanvasLabel = document.getElementById('cgaCanvasLabel');
         
-        let activePalette = CGA_PALETTES[selectPalette.value];
+        const codeSnippet = document.getElementById('codeSnippet');
+        
+        let activePalette = CGA_PALETTES.spectrum;
 
 
         // === UTILIDADES ===
-
         function getClosestColorIndex(r, g, b, palette) {
             let minDiff = Infinity;
             let closest = 0;
             palette.forEach((col, index) => {
-                // Distancia euclidiana simplificada (sin raíz cuadrada)
                 const diff = (r - col.r)**2 + (g - col.g)**2 + (b - col.b)**2;
                 if (diff < minDiff) { minDiff = diff; closest = index; }
             });
@@ -321,18 +365,30 @@ SCREEN 0
 
             return { newW: newW, newH: newH, offsetX: offsetX, offsetY: offsetY };
         }
-
+        
         function updateCodeBlock(paletteKey) {
-            const codeBlock = document.querySelector('.code-block pre');
-            let colorSetting = '';
+            let code = '';
             
-            if (paletteKey === 'palette1') {
-                colorSetting = 'COLOR 0, 1  \' Fondo Negro, Paleta 1 (Cian, Magenta, Blanco)';
-            } else if (paletteKey === 'palette2') {
-                colorSetting = 'COLOR 0, 0  \' Fondo Negro, Paleta 0 (Verde, Rojo, Marrón)';
-            }
+            if (currentMode === 'pngToSpectrum') {
+                code = `
+REM Código BASIC para ZX Spectrum
+10 CLEAR 30000: REM Reserva de memoria
+20 LOAD ""SCREEN$ FROM "IMAGEN.SCR"
+30 PAUSE 0
+                `.trim();
+                document.querySelector('.code-block strong').innerText = 'Código de Carga (ZX Spectrum BASIC):';
+            } else { // Modos CGA
+                let colorSetting = '';
+                
+                if (paletteKey === 'palette1') {
+                    colorSetting = 'COLOR 0, 1  \' Fondo Negro, Paleta 1 (Cian, Magenta, Blanco)';
+                } else if (paletteKey === 'palette2') {
+                    colorSetting = 'COLOR 0, 0  \' Fondo Negro, Paleta 0 (Verde, Rojo, Marrón)';
+                } else {
+                     colorSetting = 'COLOR 0, 1  \' Predeterminado (Paleta 1)';
+                }
 
-            codeBlock.innerHTML = `
+                code = `
 SCREEN 1
 ${colorSetting}
 DEF SEG = &HB800
@@ -340,184 +396,63 @@ BLOAD "IMAGEN.BSV", 0
 DEF SEG
 A$ = INPUT$(1)
 SCREEN 0
-`.trim();
-        }
-
-        // === CAMBIO DE MODO ===
-        function updateMode(mode) {
-            currentMode = mode;
-            fileInput.value = ''; 
-            btnConvert.disabled = true;
-            ctxOrig.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
-            ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
-            currentImage = null; 
-            
-            activePalette = CGA_PALETTES[selectPalette.value];
-
-            if (mode === 'pngToBsave') {
-                fileInput.accept = 'image/*';
-                pngSettingsDiv.style.display = 'flex'; 
-                selectDithering.style.display = 'block'; 
-                canvasPngToBsaveDiv.style.display = 'flex'; 
-                originalCanvasLabel.innerText = 'Original (Redimensionado)';
-                cgaCanvasLabel.innerText = 'CGA 4 Colores (Dithering)';
-                btnConvert.innerText = '💾 Descargar .BSV';
-                status.innerText = 'Selecciona una imagen PNG o JPG...';
-            } else {
-                fileInput.accept = '.bsv';
-                pngSettingsDiv.style.display = 'none'; 
-                selectDithering.style.display = 'none'; 
-                canvasPngToBsaveDiv.style.display = 'flex'; 
-                originalCanvasLabel.innerText = 'Previsualización 1 (Desde BSAVE)';
-                cgaCanvasLabel.innerText = 'Previsualización 2 (Desde BSAVE)';
-                btnConvert.innerText = '🖼️ Descargar PNG';
-                status.innerText = 'Selecciona un archivo .BSV (Formato CGA SCREEN 1)...';
+                `.trim();
+                document.querySelector('.code-block strong').innerText = 'Código de Carga (PowerBASIC 3.5):';
             }
 
-            updateCodeBlock(selectPalette.value); 
+            codeSnippet.innerHTML = code;
         }
 
-        // --- Dithering Algoritmos ---
 
-        // Función auxiliar para distribuir el error
-        function distributeError(data, x, y, errR, errG, errB, factor) {
-            if (x < 0 || x >= CGA_WIDTH || y >= CGA_HEIGHT) return;
-            const i = (y * CGA_WIDTH + x) * 4;
+        // === ALGORITMOS DE DITHERING ===
+
+        function distributeError(data, x, y, errR, errG, errB, factor, width, height) {
+            if (x < 0 || x >= width || y >= height) return;
+            const i = (y * width + x) * 4;
             
             data[i] = clamp(data[i] + errR * factor);
             data[i+1] = clamp(data[i+1] + errG * factor);
             data[i+2] = clamp(data[i+2] + errB * factor);
         }
-        
-        // 1. Floyd-Steinberg (Dispersión de Error: 16)
-        function applyFloydSteinberg(data, palette) {
-            const width = CGA_WIDTH;
-            const height = CGA_HEIGHT;
 
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
+        function applyFloydSteinberg(pixels, palette, width, height) {
+            const w = width;
+            const h = height;
+            
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
 
-                    const oldR = data[i];
-                    const oldG = data[i + 1];
-                    const oldB = data[i + 2];
+                    const oldR = pixels[i];
+                    const oldG = pixels[i + 1];
+                    const oldB = pixels[i + 2];
+                    
+                    const index = getClosestColorIndex(oldR, oldG, oldB, palette);
+                    const newColor = palette[index];
 
-                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
-                    const newColor = palette[closestIdx];
-
-                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
+                    pixels[i] = newColor.r;
+                    pixels[i + 1] = newColor.g;
+                    pixels[i + 2] = newColor.b;
 
                     const errR = oldR - newColor.r;
                     const errG = oldG - newColor.g;
                     const errB = oldB - newColor.b;
 
-                    // Distribución del error: [7/16] [3/16] [5/16] [1/16]
-                    distributeError(data, x + 1, y, errR, errG, errB, 7 / 16);
-                    distributeError(data, x - 1, y + 1, errR, errG, errB, 3 / 16);
-                    distributeError(data, x, y + 1, errR, errG, errB, 5 / 16);
-                    distributeError(data, x + 1, y + 1, errR, errG, errB, 1 / 16);
+                    distributeError(pixels, x + 1, y, errR, errG, errB, 7 / 16, w, h);
+                    distributeError(pixels, x - 1, y + 1, errR, errG, errB, 3 / 16, w, h);
+                    distributeError(pixels, x, y + 1, errR, errG, errB, 5 / 16, w, h);
+                    distributeError(pixels, x + 1, y + 1, errR, errG, errB, 1 / 16, w, h);
                 }
             }
         }
         
-        // 2. Jarvis, Judice & Ninke (Dispersión de Error: 48)
-        function applyJarvisJudiceNinke(data, palette) {
-            const width = CGA_WIDTH;
-            const height = CGA_HEIGHT;
-            const divisor = 48; // Total de la suma de pesos
+        function applyBayerDithering(data, palette, width, height) {
+            const w = width; const h = height;
+            const thresholdScale = 255 / (palette.length > 7 ? 15 : 3) / BAYER_DIVISOR;
 
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
-
-                    const oldR = data[i];
-                    const oldG = data[i + 1];
-                    const oldB = data[i + 2];
-
-                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
-                    const newColor = palette[closestIdx];
-
-                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
-
-                    const errR = oldR - newColor.r;
-                    const errG = oldG - newColor.g;
-                    const errB = oldB - newColor.b;
-
-                    // Fila 1: (7) (5)
-                    distributeError(data, x + 1, y, errR, errG, errB, 7 / divisor);
-                    distributeError(data, x + 2, y, errR, errG, errB, 5 / divisor);
-                    
-                    // Fila 2: (3) (5) (7) (5) (3)
-                    distributeError(data, x - 2, y + 1, errR, errG, errB, 3 / divisor);
-                    distributeError(data, x - 1, y + 1, errR, errG, errB, 5 / divisor);
-                    distributeError(data, x, y + 1, errR, errG, errB, 7 / divisor);
-                    distributeError(data, x + 1, y + 1, errR, errG, errB, 5 / divisor);
-                    distributeError(data, x + 2, y + 1, errR, errG, errB, 3 / divisor);
-                    
-                    // Fila 3: (1) (3) (5) (3) (1)
-                    distributeError(data, x - 2, y + 2, errR, errG, errB, 1 / divisor);
-                    distributeError(data, x - 1, y + 2, errR, errG, errB, 3 / divisor);
-                    distributeError(data, x, y + 2, errR, errG, errB, 5 / divisor);
-                    distributeError(data, x + 1, y + 2, errR, errG, errB, 3 / divisor);
-                    distributeError(data, x + 2, y + 2, errR, errG, errB, 1 / divisor);
-                }
-            }
-        }
-        
-        // 3. Stucki (Dispersión de Error: 42)
-        function applyStucki(data, palette) {
-            const width = CGA_WIDTH;
-            const height = CGA_HEIGHT;
-            const divisor = 42; // Total de la suma de pesos
-
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
-
-                    const oldR = data[i];
-                    const oldG = data[i + 1];
-                    const oldB = data[i + 2];
-
-                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
-                    const newColor = palette[closestIdx];
-
-                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
-
-                    const errR = oldR - newColor.r;
-                    const errG = oldG - newColor.g;
-                    const errB = oldB - newColor.b;
-
-                    // Fila 1: (8) (4)
-                    distributeError(data, x + 1, y, errR, errG, errB, 8 / divisor);
-                    distributeError(data, x + 2, y, errR, errG, errB, 4 / divisor);
-                    
-                    // Fila 2: (2) (4) (8) (4) (2)
-                    distributeError(data, x - 2, y + 1, errR, errG, errB, 2 / divisor);
-                    distributeError(data, x - 1, y + 1, errR, errG, errB, 4 / divisor);
-                    distributeError(data, x, y + 1, errR, errG, errB, 8 / divisor);
-                    distributeError(data, x + 1, y + 1, errR, errG, errB, 4 / divisor);
-                    distributeError(data, x + 2, y + 1, errR, errG, errB, 2 / divisor);
-                    
-                    // Fila 3: (1) (2) (4) (2) (1)
-                    distributeError(data, x - 2, y + 2, errR, errG, errB, 1 / divisor);
-                    distributeError(data, x - 1, y + 2, errR, errG, errB, 2 / divisor);
-                    distributeError(data, x, y + 2, errR, errG, errB, 4 / divisor);
-                    distributeError(data, x + 1, y + 2, errR, errG, errB, 2 / divisor);
-                    distributeError(data, x + 2, y + 2, errR, errG, errB, 1 / divisor);
-                }
-            }
-        }
-
-
-        // 4. Bayer Ordered Dithering (Umbral Ordenado)
-        function applyBayerDithering(data, palette) {
-            const width = CGA_WIDTH;
-            const height = CGA_HEIGHT;
-            const thresholdScale = 255 / (palette.length - 1) / BAYER_DIVISOR;
-
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
 
                     const oldR = data[i];
                     const oldG = data[i + 1];
@@ -537,84 +472,209 @@ SCREEN 0
             }
         }
 
-        // 5. Ninguno (Umbral Fijo)
-        function applyNoDithering(data, palette) {
-            const width = CGA_WIDTH;
-            const height = CGA_HEIGHT;
+        function applyJarvisJudiceNinke(data, palette, width, height) {
+            const w = width; const h = height;
+            const divisor = 48; 
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
+                    const oldR = data[i], oldG = data[i + 1], oldB = data[i + 2];
+                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
+                    const newColor = palette[closestIdx];
+                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
+                    const errR = oldR - newColor.r; const errG = oldG - newColor.g; const errB = oldB - newColor.b;
+                    distributeError(data, x + 1, y, errR, errG, errB, 7 / divisor, w, h);
+                    distributeError(data, x + 2, y, errR, errG, errB, 5 / divisor, w, h);
+                    distributeError(data, x - 2, y + 1, errR, errG, errB, 3 / divisor, w, h);
+                    distributeError(data, x - 1, y + 1, errR, errG, errB, 5 / divisor, w, h);
+                    distributeError(data, x, y + 1, errR, errG, errB, 7 / divisor, w, h);
+                    distributeError(data, x + 1, y + 1, errR, errG, errB, 5 / divisor, w, h);
+                    distributeError(data, x + 2, y + 1, errR, errG, errB, 3 / divisor, w, h);
+                    distributeError(data, x - 2, y + 2, errR, errG, errB, 1 / divisor, w, h);
+                    distributeError(data, x - 1, y + 2, errR, errG, errB, 3 / divisor, w, h);
+                    distributeError(data, x, y + 2, errR, errG, errB, 5 / divisor, w, h);
+                    distributeError(data, x + 1, y + 2, errR, errG, errB, 3 / divisor, w, h);
+                    distributeError(data, x + 2, y + 2, errR, errG, errB, 1 / divisor, w, h);
+                }
+            }
+        }
 
-            for (let y = 0; y < height; y++) {
-                for (let x = 0; x < width; x++) {
-                    const i = (y * width + x) * 4;
-                    
+        function applyStucki(data, palette, width, height) {
+            const w = width; const h = height;
+            const divisor = 42; 
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
+                    const oldR = data[i], oldG = data[i + 1], oldB = data[i + 2];
+                    const closestIdx = getClosestColorIndex(oldR, oldG, oldB, palette); 
+                    const newColor = palette[closestIdx];
+                    data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
+                    const errR = oldR - newColor.r; const errG = oldG - newColor.g; const errB = oldB - newColor.b;
+                    distributeError(data, x + 1, y, errR, errG, errB, 8 / divisor, w, h);
+                    distributeError(data, x + 2, y, errR, errG, errB, 4 / divisor, w, h);
+                    distributeError(data, x - 2, y + 1, errR, errG, errB, 2 / divisor, w, h);
+                    distributeError(data, x - 1, y + 1, errR, errG, errB, 4 / divisor, w, h);
+                    distributeError(data, x, y + 1, errR, errG, errB, 8 / divisor, w, h);
+                    distributeError(data, x + 1, y + 1, errR, errG, errB, 4 / divisor, w, h);
+                    distributeError(data, x + 2, y + 1, errR, errG, errB, 2 / divisor, w, h);
+                    distributeError(data, x - 2, y + 2, errR, errG, errB, 1 / divisor, w, h);
+                    distributeError(data, x - 1, y + 2, errR, errG, errB, 2 / divisor, w, h);
+                    distributeError(data, x, y + 2, errR, errG, errB, 4 / divisor, w, h);
+                    distributeError(data, x + 1, y + 2, errR, errG, errB, 2 / divisor, w, h);
+                    distributeError(data, x + 2, y + 2, errR, errG, errB, 1 / divisor, w, h);
+                }
+            }
+        }
+
+        function applyNoDithering(data, palette, width, height) {
+            const w = width; const h = height;
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
                     const closestIdx = getClosestColorIndex(data[i], data[i+1], data[i+2], palette);
                     const newColor = palette[closestIdx];
-
                     data[i] = newColor.r; data[i + 1] = newColor.g; data[i + 2] = newColor.b;
                 }
             }
         }
 
 
-        // Función principal de procesamiento de imagen PNG
+        // === CAMBIO DE MODO ===
+        function updateMode(mode) {
+            currentMode = mode;
+            fileInput.value = ''; 
+            btnConvert.disabled = true;
+            
+            ctxOrig.clearRect(0, 0, Math.max(SPEC_WIDTH, CGA_WIDTH), Math.max(SPEC_HEIGHT, CGA_HEIGHT)); 
+            ctxCGA.clearRect(0, 0, Math.max(SPEC_WIDTH, CGA_WIDTH), Math.max(SPEC_HEIGHT, CGA_HEIGHT));
+            currentImage = null; 
+            
+            canvasOriginal.classList.remove('canvas-spectrum');
+            canvasCGA.classList.remove('canvas-spectrum');
+            
+            pngSettingsDiv.style.display = 'none';
+            spectrumSettingsDiv.style.display = 'none';
+            
+            // 2. Control de Paletas Visibles
+            document.querySelectorAll('#selectPalette option').forEach(opt => {
+                opt.style.display = (mode === 'pngToSpectrum' && opt.value !== 'spectrum') ? 'none' : 'block';
+                opt.style.display = (mode !== 'pngToSpectrum' && opt.value === 'spectrum') ? 'none' : opt.style.display;
+            });
+
+
+            if (mode.includes('Bsave')) { // CGA Modes
+                fileInput.accept = mode === 'pngToBsave' ? 'image/*' : '.bsv';
+                pngSettingsDiv.style.display = 'flex'; 
+                selectDithering.parentElement.style.display = 'flex'; 
+                canvasOriginal.width = CGA_WIDTH; canvasOriginal.height = CGA_HEIGHT;
+                canvasCGA.width = CGA_WIDTH; canvasCGA.height = CGA_HEIGHT;
+                originalCanvasLabel.innerText = mode === 'pngToBsave' ? 'Original (Redimensionado)' : 'Previsualización 1 (Desde BSAVE)';
+                cgaCanvasLabel.innerText = mode === 'pngToBsave' ? 'CGA 4 Colores (Dithering)' : 'Previsualización 2 (Desde BSAVE)';
+                btnConvert.innerText = mode === 'pngToBsave' ? '💾 Descargar .BSV' : '🖼️ Descargar PNG';
+                status.innerText = mode === 'pngToBsave' ? 'Selecciona una imagen PNG o JPG...' : 'Selecciona un archivo .BSV...';
+                
+                selectPalette.value = selectPalette.value === 'spectrum' ? 'palette1' : selectPalette.value;
+                activePalette = CGA_PALETTES[selectPalette.value];
+
+            } else if (mode === 'pngToSpectrum') { // Spectrum Mode
+                fileInput.accept = 'image/*';
+                spectrumSettingsDiv.style.display = 'flex';
+                canvasOriginal.width = SPEC_WIDTH; canvasOriginal.height = SPEC_HEIGHT;
+                canvasCGA.width = SPEC_WIDTH; canvasCGA.height = SPEC_HEIGHT;
+                canvasOriginal.classList.add('canvas-spectrum');
+                canvasCGA.classList.add('canvas-spectrum');
+
+                originalCanvasLabel.innerText = 'Original (Redimensionado)';
+                cgaCanvasLabel.innerText = chkMonochrome.checked ? 'Spectrum Monocromo (Luminancia)' : 'Spectrum 15 Colores (Dithering)';
+                btnConvert.innerText = '💾 Descargar .SCR';
+                status.innerText = 'Selecciona una imagen para convertir a ZX Spectrum...';
+                
+                selectPalette.value = 'spectrum';
+                activePalette = CGA_PALETTES.spectrum;
+            }
+
+            updateCodeBlock(selectPalette.value); 
+        }
+
+        /**
+         * Función central para dibujar y procesar la imagen cargada.
+         */
         function processImage(img) {
-            if (currentMode !== 'pngToBsave') return; 
-
             status.innerText = "Procesando...";
-            activePalette = CGA_PALETTES[selectPalette.value];
-            const ditheringMode = selectDithering.value; 
+            let currentWidth, currentHeight, adaptChecked, targetMode = currentMode;
 
-            // 1. Limpiar lienzos y dibujar fondo negro (0, 0, 0)
-            ctxOrig.fillStyle = 'black';
-            ctxOrig.fillRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
-            ctxCGA.fillStyle = 'black';
-            ctxCGA.fillRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            if (currentMode === 'pngToBsave') {
+                currentWidth = CGA_WIDTH; currentHeight = CGA_HEIGHT;
+                adaptChecked = chkResize.checked;
+                activePalette = CGA_PALETTES[selectPalette.value];
+            } else if (currentMode === 'pngToSpectrum') {
+                currentWidth = SPEC_WIDTH; currentHeight = SPEC_HEIGHT;
+                adaptChecked = chkResizeSpectrum.checked;
+                activePalette = CGA_PALETTES.spectrum;
+            } else {
+                return; 
+            }
+            
+            // Si la imagen no está lista, salimos
+            if (img.width === 0 || img.height === 0) {
+                 status.innerText = "⚠️ Error: La imagen cargada no tiene dimensiones válidas.";
+                 return;
+            }
 
-            const adaptChecked = chkResize.checked;
+            // 1. Limpiar lienzos y dibujar fondo negro
+            ctxOrig.fillStyle = 'black'; ctxOrig.fillRect(0, 0, currentWidth, currentHeight);
+            ctxCGA.fillStyle = 'black'; ctxCGA.fillRect(0, 0, currentWidth, currentHeight);
+
+            // 2. Cálculo de redimensionamiento
             let drawX, drawY, drawW, drawH;
             
             if (adaptChecked) {
-                drawX = 0; drawY = 0; drawW = CGA_WIDTH; drawH = CGA_HEIGHT;
-                originalCanvasLabel.innerText = 'Original (Estirado 320x200)';
+                // Estirar a tamaño completo del lienzo
+                drawX = 0; drawY = 0; drawW = currentWidth; drawH = currentHeight;
+                originalCanvasLabel.innerText = `Original (Estirado ${currentWidth}x${currentHeight})`;
             } else {
-                const fit = calculateFitDimensions(img.width, img.height, CGA_WIDTH, CGA_HEIGHT);
+                // Mantener Aspect Ratio
+                const fit = calculateFitDimensions(img.width, img.height, currentWidth, currentHeight);
                 drawW = fit.newW; drawH = fit.newH; drawX = fit.offsetX; drawY = fit.offsetY;
                 originalCanvasLabel.innerText = 'Original (Ajustado A.R.)';
             }
 
-            // 2. Dibujar imagen redimensionada
+            // 3. Dibujar la imagen original (PREVISUALIZACIÓN)
             ctxOrig.drawImage(img, drawX, drawY, drawW, drawH);
             ctxCGA.drawImage(img, drawX, drawY, drawW, drawH);
             
-            // 3. Aplicar Dithering CGA
-            // Usamos setTimeout para asegurar que el DOM refresque la imagen antes de leerla
-            // (aunque no es estrictamente necesario en este entorno simple, ayuda a simular un proceso)
+            // 4. Aplicar Dithering (asíncrono para liberar el hilo principal)
+            const ditheringMode = currentMode === 'pngToBsave' ? selectDithering.value : 'floyd-steinberg';
+            const isMonochrome = currentMode === 'pngToSpectrum' && chkMonochrome.checked;
+            
             setTimeout(() => {
                 try {
-                    const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
-                    
+                    const imgData = ctxCGA.getImageData(0, 0, currentWidth, currentHeight);
                     let ditheringName = '';
 
-                    if (ditheringMode === 'floyd-steinberg') {
-                        applyFloydSteinberg(imgData.data, activePalette);
-                        ditheringName = 'Floyd-Steinberg (Granulado)';
-                    } else if (ditheringMode === 'bayer') {
-                        applyBayerDithering(imgData.data, activePalette);
-                        ditheringName = 'Bayer 4x4 (Patrón Sólido)';
-                    } else if (ditheringMode === 'jjn') {
-                        applyJarvisJudiceNinke(imgData.data, activePalette);
-                        ditheringName = 'Jarvis-Judice-Ninke (Alta Calidad)';
-                    } else if (ditheringMode === 'stucki') {
-                        applyStucki(imgData.data, activePalette);
-                        ditheringName = 'Stucki (Buen Balance)';
-                    } else if (ditheringMode === 'none') {
-                        applyNoDithering(imgData.data, activePalette);
-                        ditheringName = 'Umbral Fijo (Ninguno)';
+                    // Seleccionar función de dithering
+                    let ditherFn;
+                    if (ditheringMode === 'floyd-steinberg') { ditherFn = applyFloydSteinberg; ditheringName = 'Floyd-Steinberg (Granulado)'; }
+                    else if (ditheringMode === 'bayer') { ditherFn = applyBayerDithering; ditheringName = 'Bayer 4x4 (Patrón Sólido)'; }
+                    else if (ditheringMode === 'jjn') { ditherFn = applyJarvisJudiceNinke; ditheringName = 'Jarvis-Judice-Ninke (Alta Calidad)'; }
+                    else if (ditheringMode === 'stucki') { ditherFn = applyStucki; ditheringName = 'Stucki (Buen Balance)'; }
+                    else if (ditheringMode === 'none') { ditherFn = applyNoDithering; ditheringName = 'Umbral Fijo (Ninguno)'; }
+                    
+                    if (ditherFn) {
+                        // En modo monocromo forzamos la paleta a Blanco y Negro para el dithering
+                        const ditherPalette = isMonochrome ? [CGA_PALETTES.spectrum[0], CGA_PALETTES.spectrum[7]] : activePalette;
+                        ditherFn(imgData.data, ditherPalette, currentWidth, currentHeight);
                     }
                     
-                    cgaCanvasLabel.innerText = `CGA 4 Colores (${ditheringName})`;
-                    ctxCGA.putImageData(imgData, 0, 0);
-                    btnConvert.disabled = false; // Habilitar el botón aquí
-                    status.innerText = "✅ Conversión lista. Compara las imágenes.";
+                    if (isMonochrome) {
+                        cgaCanvasLabel.innerText = `Spectrum Monocromo (Luminancia)`;
+                    } else {
+                        cgaCanvasLabel.innerText = currentMode === 'pngToBsave' ? `CGA 4 Colores (${ditheringName})` : `Spectrum 15 Colores (${ditheringName})`;
+                    }
+                    
+                    ctxCGA.putImageData(imgData, 0, 0); 
+                    btnConvert.disabled = false;
+                    status.innerText = `✅ Conversión lista. Compara las imágenes.`;
                 } catch(e) {
                     status.innerText = `⚠️ Error al aplicar el dithering: ${e.message}`;
                     btnConvert.disabled = true;
@@ -625,7 +685,7 @@ SCREEN 0
             updateCodeBlock(selectPalette.value);
         }
 
-        // --- Generación BSAVE y Descompresión (Mantienen la lógica original) ---
+        // --- Generación BSAVE (CGA) ---
         
         function generateBsave(pixels) {
             const buffer = new Uint8Array(7 + CGA_MEMORY_SIZE);
@@ -633,7 +693,7 @@ SCREEN 0
             view.setUint8(0, 0xFD); view.setUint16(1, 0x0000, true); 
             view.setUint16(3, 0xB800, true); view.setUint16(5, CGA_MEMORY_SIZE, true); 
 
-            const EVEN_OFFSET = 7;
+            const EVEN_OFFSET = 7; 
             const ODD_OFFSET = 7 + CGA_MEMORY_SIZE / 2; 
             const paletteToUse = CGA_PALETTES[selectPalette.value];
 
@@ -648,19 +708,10 @@ SCREEN 0
                     for (let k = 0; k < 4; k++) {
                         const pixelX = x + k;
                         const idx = ((y * CGA_WIDTH) + pixelX) * 4;
-                        let colorIndex = 0; 
                         
                         const r = pixels[idx], g = pixels[idx+1], b = pixels[idx+2];
+                        const colorIndex = getClosestColorIndex(r, g, b, paletteToUse);
                         
-                        // Buscar el índice de color correspondiente en la paleta
-                        for(let c=0; c<paletteToUse.length; c++) {
-                            const pal = paletteToUse[c];
-                            if (r === pal.r && g === pal.g && b === pal.b) {
-                                colorIndex = pal.index;
-                                break;
-                            }
-                        }
-                        // Empaquetar 4 píxeles (2 bits cada uno) en 1 byte
                         byteVal |= (colorIndex << (6 - (k * 2)));
                     }
                     buffer[lineStart + (x / 4)] = byteVal;
@@ -668,54 +719,119 @@ SCREEN 0
             }
             return buffer;
         }
-        
-        function processBsave(buffer) {
-            const data = new DataView(buffer);
 
-            if (data.getUint8(0) !== 0xFD) {
-                status.innerText = "Error: Archivo no parece ser un formato BSAVE válido (Cabecera 0xFD).";
-                btnConvert.disabled = true;
-                return;
-            }
+        // --- Generación SCR (Spectrum - CON SOPORTE MONOCROMO Y CORRECCIÓN) ---
+        function generateSpectrumScr(pixels) {
+            const buffer = new Uint8Array(SPEC_SCREEN_SIZE);
+            const palette = activePalette;
+            const isMonochrome = chkMonochrome.checked; 
+            
+            for (let y = 0; y < SPEC_HEIGHT; y++) {
+                // Cálculo de direcciones de píxeles (Bitplane)
+                const y_tercio = Math.floor(y / 64) * 0x800; 
+                const y_linea = (y % 8) * 0x100; 
+                const y_bloque = Math.floor((y % 64) / 8) * 0x20; 
+                const pixelBaseAddr = y_tercio + y_linea + y_bloque; 
 
-            const imgData = ctxCGA.createImageData(CGA_WIDTH, CGA_HEIGHT);
-            const pixels = imgData.data;
+                const attrY = Math.floor(y / 8);
+                
+                for (let x = 0; x < SPEC_WIDTH; x += 8) {
+                    const blockX = x / 8;
+                    const pixelAddress = pixelBaseAddr + blockX; 
+                    const attrAddr = 6144 + (attrY * 32) + blockX;
 
-            const EVEN_OFFSET = 7;
-            const ODD_OFFSET = 7 + CGA_MEMORY_SIZE / 2;
-            const paletteToUse = CGA_PALETTES[selectPalette.value];
+                    // 1. CÁLCULO DE ATRIBUTOS
+                    if (y % 8 === 0) { 
+                        let attributeByte;
 
-            for (let y = 0; y < CGA_HEIGHT; y++) {
-                const isOdd = (y % 2 !== 0);
-                const lineIndex = Math.floor(y / 2);
-                const baseOffset = isOdd ? ODD_OFFSET : EVEN_OFFSET;
-                const lineStart = baseOffset + (lineIndex * 80);
+                        if (isMonochrome) {
+                            // Monocromo: Ink 7 (White), Paper 0 (Black), No Bright (0x00)
+                            const inkIndexMono = 7; 
+                            const paperIndexMono = 0; 
+                            attributeByte = (paperIndexMono << 3) | inkIndexMono; // 0x07 (Ink 7, Paper 0, No Bright/Flash)
+                        } else {
+                            // Lógica de color 
+                            const colorCounts = new Array(16).fill(0);
+                            for (let blockY = y; blockY < y + 8 && blockY < SPEC_HEIGHT; blockY++) {
+                                for (let blockX_px = x; blockX_px < x + 8 && blockX_px < SPEC_WIDTH; blockX_px++) {
+                                    const idx = (blockY * SPEC_WIDTH + blockX_px) * 4;
+                                    const r = pixels[idx]; const g = pixels[idx+1]; const b = pixels[idx+2];
+                                    const colorIndex = getClosestColorIndex(r, g, b, palette);
+                                    colorCounts[colorIndex]++;
+                                }
+                            }
 
-                for (let x = 0; x < CGA_WIDTH; x += 4) {
-                    const byteIndex = lineStart + (x / 4);
-                    // Asegurar que no leemos fuera del rango del buffer (aunque CGA_MEMORY_SIZE debería cubrirlo)
-                    if (byteIndex >= data.byteLength) continue; 
+                            const sortedColors = colorCounts.map((count, index) => ({ index, count }))
+                                                          .filter(c => c.count > 0)
+                                                          .sort((a, b) => b.count - a.count);
 
-                    const byteVal = data.getUint8(byteIndex);
+                            let inkIndex = 7; 
+                            let paperIndex = 0; 
+                            let isBright = false;
+                            
+                            if (sortedColors.length > 0) {
+                                let c1Index = sortedColors[0].index;
+                                let c2Index = sortedColors.length > 1 ? sortedColors[1].index : (c1Index === 0 || c1Index === 8 ? 7 : 0);
+                                
+                                if (sortedColors[0].count > 45 || (sortedColors.length > 1 && sortedColors[0].count > sortedColors[1].count * 2)) { 
+                                    paperIndex = c1Index;
+                                    inkIndex = c2Index;
+                                } else {
+                                    inkIndex = c1Index;
+                                    paperIndex = c2Index;
+                                }
+                            }
+                            
+                            if (inkIndex > 7) { isBright = true; inkIndex -= 8; }
+                            if (paperIndex > 7) { isBright = true; paperIndex -= 8; } 
+                            
+                            if (paperIndex === inkIndex) {
+                                 if (inkIndex !== 7) inkIndex = 7; else inkIndex = 0; 
+                            }
 
-                    for (let k = 0; k < 4; k++) {
-                        const colorIndex = (byteVal >> (6 - (k * 2))) & 0x03;
-                        const color = paletteToUse[colorIndex];
-
-                        const pixelIndex = ((y * CGA_WIDTH) + (x + k)) * 4;
+                            attributeByte = (isBright ? 0x40 : 0x00) | (paperIndex << 3) | inkIndex;
+                        }
                         
-                        pixels[pixelIndex] = color.r; pixels[pixelIndex + 1] = color.g;
-                        pixels[pixelIndex + 2] = color.b; pixels[pixelIndex + 3] = 255; 
+                        buffer[attrAddr] = attributeByte;
                     }
+
+
+                    // 2. CÁLCULO DE PÍXELES
+                    const currentAttrByte = buffer[attrAddr]; 
+                    const inkColorIndex = (currentAttrByte & 0b00000111) + ((currentAttrByte & 0x40) ? 8 : 0);
+                    const paperColorIndex = ((currentAttrByte >> 3) & 0b00000111) + ((currentAttrByte & 0x40) ? 8 : 0);
+                    
+                    let pixelByte = 0;
+                    const threshold = 127.5; // Umbral de luminancia para monocromo
+                    
+                    for (let bit = 0; bit < 8; bit++) {
+                        const pixelX = x + bit;
+                        const idx = ((y * SPEC_WIDTH) + pixelX) * 4;
+                        
+                        const r = pixels[idx]; const g = pixels[idx+1]; const b = pixels[idx+2];
+                        let isInk = false;
+                        
+                        if (isMonochrome) {
+                            // En monocromo, usamos la luminancia como umbral (más blanco que gris medio es INK)
+                            const luminance = (r + g + b) / 3;
+                            isInk = luminance >= threshold;
+                        } else {
+                            // En color, comparamos la distancia al color Ink vs Paper
+                            const diffInk = (r - palette[inkColorIndex].r)**2 + (g - palette[inkColorIndex].g)**2 + (b - palette[inkColorIndex].b)**2;
+                            // CORRECCIÓN: Usar paperColorIndex en lugar de paperIndex (que no estaba definida)
+                            const diffPaper = (r - palette[paperColorIndex].r)**2 + (g - palette[paperColorIndex].g)**2 + (b - palette[paperColorIndex].b)**2;
+                            isInk = diffInk < diffPaper;
+                        }
+                        
+                        if (isInk) {
+                             pixelByte |= (1 << (7 - bit)); 
+                        } 
+                    }
+                    
+                    buffer[pixelAddress] = pixelByte;
                 }
             }
-            
-            ctxCGA.putImageData(imgData, 0, 0);
-            ctxOrig.putImageData(imgData, 0, 0); 
-            
-            btnConvert.disabled = false;
-            status.innerText = `✅ Conversión lista. Descarga el PNG de ${CGA_WIDTH}x${CGA_HEIGHT}.`;
-            updateCodeBlock(selectPalette.value);
+            return buffer;
         }
 
 
@@ -725,26 +841,22 @@ SCREEN 0
 
         fileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
-            if (!file) {
-                 status.innerText = 'Selecciona una imagen...';
-                 return;
-            }
+            if (!file) { status.innerText = 'Selecciona un archivo...'; return; }
 
             fileName = file.name.split('.')[0];
-            ctxOrig.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
-            ctxCGA.clearRect(0, 0, CGA_WIDTH, CGA_HEIGHT);
+            ctxOrig.clearRect(0, 0, canvasOriginal.width, canvasOriginal.height);
+            ctxCGA.clearRect(0, 0, canvasCGA.width, canvasCGA.height);
             currentImage = null; 
             btnConvert.disabled = true;
 
-            if (currentMode === 'pngToBsave') {
+            if (currentMode === 'pngToBsave' || currentMode === 'pngToSpectrum') {
                 status.innerText = 'Cargando imagen...';
                 const url = URL.createObjectURL(file);
 
-                // Función que devuelve una promesa para esperar la carga de la imagen
                 const loadImage = () => new Promise((resolve, reject) => {
                     const img = new Image();
                     img.onload = () => resolve(img);
-                    img.onerror = () => reject(new Error('Error al cargar la imagen.'));
+                    img.onerror = () => reject(new Error('Error al cargar la imagen (URL inválida o corrupta).'));
                     img.src = url;
                 });
                 
@@ -754,50 +866,33 @@ SCREEN 0
                     processImage(img);
                     URL.revokeObjectURL(url);
                 } catch (error) {
-                    status.innerText = `⚠️ Error: ${error.message}`;
+                    status.innerText = `⚠️ Error: ${error.message}. ¿Es un archivo de imagen válido?`;
                     console.error(error);
                     URL.revokeObjectURL(url);
                 }
 
             } else if (currentMode === 'bsaveToPng') {
-                status.innerText = 'Cargando archivo BSAVE...';
+                status.innerText = 'Cargando archivo binario...';
                 try {
                     const buffer = await file.arrayBuffer();
-                    processBsave(buffer);
+                    status.innerText = '⚠️ La conversión de binario a PNG no está implementada en esta versión.';
+                    btnConvert.disabled = true;
                 } catch (error) {
-                    status.innerText = `⚠️ Error al leer el archivo BSAVE: ${error.message}`;
+                    status.innerText = `⚠️ Error al leer el archivo binario: ${error.message}`;
                     console.error(error);
                 }
             }
         });
 
-        // Evento de cambio de Checkbox (Redimensionamiento)
-        chkResize.addEventListener('change', () => {
-            if (currentMode === 'pngToBsave' && currentImage) {
-                processImage(currentImage);
-            }
-        });
-        
-        // Evento de cambio de Paleta
-        selectPalette.addEventListener('change', () => {
-            if (currentMode === 'pngToBsave' && currentImage) {
-                processImage(currentImage);
-            } else if (currentMode === 'bsaveToPng' && fileInput.files.length > 0) {
-                 // Disparar la recarga del archivo BSAVE con la nueva paleta
-                 const file = fileInput.files[0];
-                 file.arrayBuffer().then(processBsave).catch(error => {
-                    status.innerText = `⚠️ Error al re-procesar BSAVE: ${error.message}`;
-                    console.error(error);
-                 });
-            }
-            updateCodeBlock(selectPalette.value);
-        });
-        
-        // Evento de cambio de Dithering
-        selectDithering.addEventListener('change', () => {
-            if (currentMode === 'pngToBsave' && currentImage) {
-                processImage(currentImage);
-            }
+        // Event Listeners para re-procesar al cambiar configuración
+        chkResize.addEventListener('change', () => { if (currentMode === 'pngToBsave' && currentImage) { processImage(currentImage); } });
+        chkResizeSpectrum.addEventListener('change', () => { if (currentMode === 'pngToSpectrum' && currentImage) { processImage(currentImage); } });
+        selectPalette.addEventListener('change', () => { if ((currentMode === 'pngToBsave' || currentMode === 'pngToSpectrum') && currentImage) { processImage(currentImage); } updateCodeBlock(selectPalette.value); });
+        selectDithering.addEventListener('change', () => { if ((currentMode === 'pngToBsave' || currentMode === 'pngToSpectrum') && currentImage) { processImage(currentImage); } });
+        chkMonochrome.addEventListener('change', () => { 
+            if (currentMode === 'pngToSpectrum' && currentImage) { 
+                processImage(currentImage); 
+            } 
         });
 
 
@@ -806,10 +901,10 @@ SCREEN 0
             if (btnConvert.disabled) return;
             
             if (currentMode === 'pngToBsave') {
+                // Generación de BSAVE
                 try {
                     const imgData = ctxCGA.getImageData(0, 0, CGA_WIDTH, CGA_HEIGHT);
                     const buffer = generateBsave(imgData.data);
-                    
                     const blob = new Blob([buffer], { type: "application/octet-stream" });
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(blob);
@@ -817,11 +912,30 @@ SCREEN 0
                     document.body.appendChild(link);
                     link.click();
                     document.body.removeChild(link);
+                    status.innerText = `✅ Archivo .BSV generado y descargado como ${fileName}_CGA.BSV.`;
                 } catch(e) {
                     status.innerText = `⚠️ Error al generar BSAVE: ${e.message}`;
                     console.error("BSAVE Generation Error:", e);
                 }
+            } else if (currentMode === 'pngToSpectrum') {
+                 // Generación de SCR
+                 try {
+                    const imgData = ctxCGA.getImageData(0, 0, SPEC_WIDTH, SPEC_HEIGHT);
+                    const buffer = generateSpectrumScr(imgData.data);
+                    const blob = new Blob([buffer], { type: "application/octet-stream" });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = fileName + "_SPEC.SCR";
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    status.innerText = `✅ Archivo .SCR generado y descargado como ${fileName}_SPEC.SCR.`;
+                } catch(e) {
+                    status.innerText = `⚠️ Error al generar .SCR: ${e.message}`;
+                    console.error("SCR Generation Error:", e);
+                }
             } else if (currentMode === 'bsaveToPng') {
+                // Descarga de PNG
                 const link = document.createElement('a');
                 link.download = fileName + "_CGA.png";
                 link.href = canvasCGA.toDataURL('image/png');
