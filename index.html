@@ -720,7 +720,7 @@ SCREEN 0
             return buffer;
         }
 
-        // --- Generación SCR (Spectrum - CON SOPORTE MONOCROMO Y CORRECCIÓN) ---
+        // --- Generación SCR (Spectrum - CON CORRECCIÓN DE ATRIBUTOS POR MINIMIZACIÓN DE ERROR) ---
         function generateSpectrumScr(pixels) {
             const buffer = new Uint8Array(SPEC_SCREEN_SIZE);
             const palette = activePalette;
@@ -740,70 +740,78 @@ SCREEN 0
                     const pixelAddress = pixelBaseAddr + blockX; 
                     const attrAddr = 6144 + (attrY * 32) + blockX;
 
-                    // 1. CÁLCULO DE ATRIBUTOS
+                    // 1. CÁLCULO DE ATRIBUTOS (Solo se calcula para la primera línea del bloque 8x8)
                     if (y % 8 === 0) { 
-                        let attributeByte;
+                        let attributeByte = 0;
 
                         if (isMonochrome) {
                             // Monocromo: Ink 7 (White), Paper 0 (Black), No Bright (0x00)
                             const inkIndexMono = 7; 
                             const paperIndexMono = 0; 
-                            attributeByte = (paperIndexMono << 3) | inkIndexMono; // 0x07 (Ink 7, Paper 0, No Bright/Flash)
+                            attributeByte = (paperIndexMono << 3) | inkIndexMono; 
                         } else {
-                            // Lógica de color 
-                            const colorCounts = new Array(16).fill(0);
-                            for (let blockY = y; blockY < y + 8 && blockY < SPEC_HEIGHT; blockY++) {
-                                for (let blockX_px = x; blockX_px < x + 8 && blockX_px < SPEC_WIDTH; blockX_px++) {
-                                    const idx = (blockY * SPEC_WIDTH + blockX_px) * 4;
-                                    const r = pixels[idx]; const g = pixels[idx+1]; const b = pixels[idx+2];
-                                    const colorIndex = getClosestColorIndex(r, g, b, palette);
-                                    colorCounts[colorIndex]++;
+                            // Lógica de optimización de color para el bloque 8x8 (Minimización de Error Cuadrático)
+                            let bestError = Infinity;
+                            
+                            // Los 8 colores base (0 a 7)
+                            const candidates = Array.from({length: 8}, (_, i) => i); 
+                            
+                            // Probar todas las combinaciones posibles de Paper, Ink, y Bright
+                            for (let bright = 0; bright <= 1; bright++) { // Bright ON/OFF (0x40)
+                                for (const paperIndex of candidates) {
+                                    for (const inkIndex of candidates) {
+                                        
+                                        // Restricción Spectrum: Ink y Paper (base) NO deben ser el mismo color
+                                        if (paperIndex === inkIndex) continue; 
+
+                                        // Colores reales en la paleta (0-15)
+                                        const actualPaperIndex = paperIndex + (bright * 8);
+                                        const actualInkIndex = inkIndex + (bright * 8);
+
+                                        const paperColor = palette[actualPaperIndex];
+                                        const inkColor = palette[actualInkIndex];
+                                        
+                                        let currentError = 0;
+
+                                        // Calcular el error cuadrático total para este par de atributos en el bloque
+                                        for (let blockY = y; blockY < y + 8 && blockY < SPEC_HEIGHT; blockY++) {
+                                            for (let blockX_px = x; blockX_px < x + 8 && blockX_px < SPEC_WIDTH; blockX_px++) {
+                                                const idx = (blockY * SPEC_WIDTH + blockX_px) * 4;
+                                                const r = pixels[idx]; const g = pixels[idx+1]; const b = pixels[idx+2];
+                                                
+                                                // Sumar el error del color que esté más cerca
+                                                const diffInk = (r - inkColor.r)**2 + (g - inkColor.g)**2 + (b - inkColor.b)**2;
+                                                const diffPaper = (r - paperColor.r)**2 + (g - paperColor.g)**2 + (b - paperColor.b)**2;
+                                                
+                                                currentError += Math.min(diffInk, diffPaper);
+                                            }
+                                        }
+
+                                        // Si esta combinación minimiza el error, la guardamos
+                                        if (currentError < bestError) {
+                                            bestError = currentError;
+                                            attributeByte = (bright ? 0x40 : 0x00) | (paperIndex << 3) | inkIndex;
+                                        }
+                                    }
                                 }
                             }
-
-                            const sortedColors = colorCounts.map((count, index) => ({ index, count }))
-                                                          .filter(c => c.count > 0)
-                                                          .sort((a, b) => b.count - a.count);
-
-                            let inkIndex = 7; 
-                            let paperIndex = 0; 
-                            let isBright = false;
-                            
-                            if (sortedColors.length > 0) {
-                                let c1Index = sortedColors[0].index;
-                                let c2Index = sortedColors.length > 1 ? sortedColors[1].index : (c1Index === 0 || c1Index === 8 ? 7 : 0);
-                                
-                                if (sortedColors[0].count > 45 || (sortedColors.length > 1 && sortedColors[0].count > sortedColors[1].count * 2)) { 
-                                    paperIndex = c1Index;
-                                    inkIndex = c2Index;
-                                } else {
-                                    inkIndex = c1Index;
-                                    paperIndex = c2Index;
-                                }
-                            }
-                            
-                            if (inkIndex > 7) { isBright = true; inkIndex -= 8; }
-                            if (paperIndex > 7) { isBright = true; paperIndex -= 8; } 
-                            
-                            if (paperIndex === inkIndex) {
-                                 if (inkIndex !== 7) inkIndex = 7; else inkIndex = 0; 
-                            }
-
-                            attributeByte = (isBright ? 0x40 : 0x00) | (paperIndex << 3) | inkIndex;
                         }
                         
                         buffer[attrAddr] = attributeByte;
                     }
 
 
-                    // 2. CÁLCULO DE PÍXELES
+                    // 2. CÁLCULO DE PÍXELES (Usa el mejor atributo encontrado)
                     const currentAttrByte = buffer[attrAddr]; 
                     const inkColorIndex = (currentAttrByte & 0b00000111) + ((currentAttrByte & 0x40) ? 8 : 0);
                     const paperColorIndex = ((currentAttrByte >> 3) & 0b00000111) + ((currentAttrByte & 0x40) ? 8 : 0);
                     
                     let pixelByte = 0;
-                    const threshold = 127.5; // Umbral de luminancia para monocromo
+                    const threshold = 127.5; 
                     
+                    const paperColor = palette[paperColorIndex];
+                    const inkColor = palette[inkColorIndex];
+
                     for (let bit = 0; bit < 8; bit++) {
                         const pixelX = x + bit;
                         const idx = ((y * SPEC_WIDTH) + pixelX) * 4;
@@ -812,14 +820,13 @@ SCREEN 0
                         let isInk = false;
                         
                         if (isMonochrome) {
-                            // En monocromo, usamos la luminancia como umbral (más blanco que gris medio es INK)
+                            // En monocromo, usamos la luminancia como umbral
                             const luminance = (r + g + b) / 3;
                             isInk = luminance >= threshold;
                         } else {
-                            // En color, comparamos la distancia al color Ink vs Paper
-                            const diffInk = (r - palette[inkColorIndex].r)**2 + (g - palette[inkColorIndex].g)**2 + (b - palette[inkColorIndex].b)**2;
-                            // CORRECCIÓN: Usar paperColorIndex en lugar de paperIndex (que no estaba definida)
-                            const diffPaper = (r - palette[paperColorIndex].r)**2 + (g - palette[paperColorIndex].g)**2 + (b - palette[paperColorIndex].b)**2;
+                            // En color, comparamos la distancia al color Ink vs Paper para decidir el bit
+                            const diffInk = (r - inkColor.r)**2 + (g - inkColor.g)**2 + (b - inkColor.b)**2;
+                            const diffPaper = (r - paperColor.r)**2 + (g - paperColor.g)**2 + (b - paperColor.b)**2;
                             isInk = diffInk < diffPaper;
                         }
                         
