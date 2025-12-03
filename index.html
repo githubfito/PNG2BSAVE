@@ -2,18 +2,17 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Conversor Retro Universal (CGA/Spectrum/CPC M0-M1)</title>
+    <title>Conversor Retro Universal (Final)</title>
     <style>
         body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 900px; }
         
-        /* Controles Superiores */
+        /* Controles */
         .mode-selection { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
         .mode-selection input { display: none; }
         .mode-selection label { padding: 10px 20px; background: #222; border: 1px solid #555; cursor: pointer; border-radius: 4px; transition: 0.2s; }
         .mode-selection input:checked + label { background: #aa00aa; color: #fff; border-color: #f0f; box-shadow: 0 0 10px #aa00aa; }
         
-        /* Area de Ajustes */
         .controls-area { background: #222; padding: 15px; border-radius: 5px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px; }
         .settings-row { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; align-items: center; }
         
@@ -21,21 +20,19 @@
         button { background: #aa00aa; font-weight: bold; border: none; padding: 10px 20px; font-size: 1.1em; }
         button:disabled { background: #555; opacity: 0.5; cursor: not-allowed; }
         
-        /* Canvas y Aspect Ratio */
+        /* Canvas */
         .canvas-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
         .canvas-box { display: flex; flex-direction: column; align-items: center; }
         canvas { border: 2px solid #fff; background: #000; image-rendering: pixelated; width: auto; height: auto; max-width: 100%; }
         
-        /* Clases CSS para simular la proporción de pantalla correcta */
-        .aspect-cpc-m0 { width: 640px; height: 400px; } /* M0 son pixeles muy anchos */
-        .aspect-cpc-m1 { width: 640px; height: 400px; } /* M1 es igual que CGA */
+        /* Aspect Ratio Classes */
+        .aspect-cpc-m0 { width: 640px; height: 400px; }
+        .aspect-cpc-m1 { width: 640px; height: 400px; }
         .aspect-spec { width: 512px; height: 384px; }
         .aspect-cga { width: 640px; height: 400px; }
         
         .label-tag { background: #000; color: #fff; padding: 2px 8px; font-size: 0.8em; margin-bottom: 5px; border-radius: 3px; }
         .code-block { background: #111; border: 1px solid #444; padding: 10px; text-align: left; margin-top: 20px; font-size: 0.8em; color: #ccc; overflow-x: auto; }
-        
-        /* Sub-paneles */
         .control-panel { display:none; border-left: 1px solid #555; padding-left: 15px; margin-left: 10px; }
     </style>
 </head>
@@ -68,8 +65,8 @@
                 <div id="cpcControls" class="control-panel" style="display:block;">
                     <label style="color:#f0f; font-weight:bold;">Modo CPC:</label>
                     <select id="selCpcMode">
-                        <option value="0">Modo 0 (160x200, 16 Colores)</option>
-                        <option value="1">Modo 1 (320x200, 4 Colores)</option>
+                        <option value="0">Modo 0 (160x200, 16 Col.)</option>
+                        <option value="1">Modo 1 (320x200, 4 Col.)</option>
                     </select>
                 </div>
 
@@ -78,7 +75,8 @@
                 </div>
                 
                 <div id="specControls" class="control-panel">
-                    <input type="checkbox" id="chkMono"> <label for="chkMono">B/N</label>
+                    <input type="checkbox" id="chkMono"> <label for="chkMono">Forzar B/N</label>
+                    <div style="font-size:0.7em; color:#aaa; margin-top:5px;">(Si es color, simula clash 8x8)</div>
                 </div>
             </div>
 
@@ -100,7 +98,7 @@
     </div>
 
     <script>
-        // === CONFIGURACION ===
+        // === PALETAS ===
         const PAL_SPEC = [
             {r:0,g:0,b:0}, {r:0,g:0,b:215}, {r:215,g:0,b:0}, {r:215,g:0,b:215},
             {r:0,g:215,b:0}, {r:0,g:215,b:215}, {r:215,g:215,b:0}, {r:215,g:215,b:215},
@@ -125,6 +123,7 @@
 
         const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 
+        // === ESTADO ===
         let state = { mode: 'cpc', cpcSubMode: 0, img: null, fileName: 'image', cpcPal: [] };
 
         const cvsOrig = document.getElementById('cvsOrig');
@@ -132,6 +131,7 @@
         const ctxOrig = cvsOrig.getContext('2d');
         const ctxDest = cvsDest.getContext('2d', { willReadFrequently: true });
 
+        // === INIT ===
         function init() {
             document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', e => updateUI(e.target.value)));
             document.getElementById('fileInput').addEventListener('change', e => {
@@ -152,11 +152,11 @@
             process();
         }
 
+        // === PROCESO PRINCIPAL ===
         function process() {
             if (!state.img) return;
             document.getElementById('status').innerText = "Procesando...";
             
-            // Determinar resolución según modo
             let w, h, cssClass;
             state.cpcSubMode = parseInt(document.getElementById('selCpcMode').value);
 
@@ -165,15 +165,13 @@
                 else { w = 320; h = 200; cssClass = 'aspect-cpc-m1'; }
             } else if (state.mode === 'spec') {
                 w = 256; h = 192; cssClass = 'aspect-spec';
-            } else { // CGA
+            } else { 
                 w = 320; h = 200; cssClass = 'aspect-cga';
             }
 
-            // Setup Canvas
             cvsOrig.width = cvsDest.width = w; cvsOrig.height = cvsDest.height = h;
             cvsOrig.className = cvsDest.className = cssClass;
             
-            // Dibujar Original
             ctxOrig.fillStyle = '#000'; ctxOrig.fillRect(0,0,w,h);
             if (document.getElementById('chkResize').checked) ctxOrig.drawImage(state.img, 0, 0, w, h);
             else {
@@ -181,27 +179,37 @@
                 ctxOrig.drawImage(state.img, (w-state.img.width*r)/2, (h-state.img.height*r)/2, state.img.width*r, state.img.height*r);
             }
 
-            // Seleccionar Paleta
             let activePalette = [];
-            if (state.mode === 'cpc') {
-                // M0 = 16 colores, M1 = 4 colores
-                const maxColors = (state.cpcSubMode === 0) ? 16 : 4;
-                state.cpcPal = detectCpcPalette(ctxOrig, w, h, maxColors);
-                activePalette = state.cpcPal;
-            } else if (state.mode === 'spec') activePalette = PAL_SPEC;
-            else activePalette = PAL_CGA[document.getElementById('selCgaPal').value];
+            const isSpecMono = (state.mode === 'spec' && document.getElementById('chkMono').checked);
 
-            // Dithering
+            if (state.mode === 'cpc') {
+                state.cpcPal = detectCpcPalette(ctxOrig, w, h, state.cpcSubMode === 0 ? 16 : 4);
+                activePalette = state.cpcPal;
+            } else if (state.mode === 'spec') {
+                activePalette = PAL_SPEC;
+            } else {
+                activePalette = PAL_CGA[document.getElementById('selCgaPal').value];
+            }
+
             const imgData = ctxOrig.getImageData(0,0,w,h);
             const data = imgData.data;
             const algo = document.getElementById('selDither').value;
 
-            if (state.mode === 'spec' && document.getElementById('chkMono').checked) applyMonochrome(data);
-            else switch(algo) {
-                case 'fs': applyFloydSteinberg(data, activePalette, w, h); break;
-                case 'bayer': applyBayer(data, activePalette, w, h); break;
-                case 'jjn': applyJJN(data, activePalette, w, h); break;
-                default: applyNearest(data, activePalette); break;
+            // --- APLICACIÓN DE EFECTOS VISUALES ---
+            
+            if (state.mode === 'spec') {
+                if (isSpecMono) {
+                    applyMonochrome(data);
+                } else {
+                    applySpectrumClashPreview(data, w, h);
+                }
+            } else {
+                switch(algo) {
+                    case 'fs': applyFloydSteinberg(data, activePalette, w, h); break;
+                    case 'bayer': applyBayer(data, activePalette, w, h); break;
+                    case 'jjn': applyJJN(data, activePalette, w, h); break;
+                    default: applyNearest(data, activePalette); break;
+                }
             }
 
             ctxDest.putImageData(imgData, 0, 0);
@@ -210,8 +218,7 @@
             document.getElementById('btnDownload').disabled = false;
         }
 
-        // === ALGORITMOS ===
-
+        // === UTILS & ALGOS ===
         function detectCpcPalette(ctx, w, h, limit) {
             const d = ctx.getImageData(0,0,w,h).data, counts = {};
             for(let i=0; i<d.length; i+=4) counts[`${d[i]},${d[i+1]},${d[i+2]}`] = (counts[`${d[i]},${d[i+1]},${d[i+2]}`] || 0) + 1;
@@ -237,10 +244,40 @@
 
         function clamp(v) { return Math.max(0, Math.min(255, v)); }
         function addErr(d, i, er, eg, eb, f) { d[i] = clamp(d[i] + er*f); d[i+1] = clamp(d[i+1] + eg*f); d[i+2] = clamp(d[i+2] + eb*f); }
-
         function applyNearest(d, pal) { for(let i=0; i<d.length; i+=4) { const c = pal[getClosestIdx(d[i], d[i+1], d[i+2], pal)]; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; } }
         function applyMonochrome(d) { for(let i=0; i<d.length; i+=4) { const v = (d[i]+d[i+1]+d[i+2])/3 > 127 ? 255 : 0; d[i]=v; d[i+1]=v; d[i+2]=v; } }
         
+        function applySpectrumClashPreview(data, w, h) {
+            for (let by = 0; by < h; by += 8) {
+                for (let bx = 0; bx < w; bx += 8) {
+                    const blockColors = {};
+                    for (let y = 0; y < 8; y++) {
+                        for (let x = 0; x < 8; x++) {
+                            const i = ((by + y) * w + (bx + x)) * 4;
+                            const idx = getClosestIdx(data[i], data[i+1], data[i+2], PAL_SPEC);
+                            blockColors[idx] = (blockColors[idx] || 0) + 1;
+                        }
+                    }
+                    const sorted = Object.keys(blockColors).sort((a,b) => blockColors[b] - blockColors[a]);
+                    const inkIdx = parseInt(sorted[0] || 0); 
+                    const paperIdx = parseInt(sorted[1] || 0);
+                    const cInk = PAL_SPEC[inkIdx];
+                    const cPaper = PAL_SPEC[paperIdx];
+
+                    for (let y = 0; y < 8; y++) {
+                        for (let x = 0; x < 8; x++) {
+                            const i = ((by + y) * w + (bx + x)) * 4;
+                            const dInk = (data[i]-cInk.r)**2 + (data[i+1]-cInk.g)**2 + (data[i+2]-cInk.b)**2;
+                            const dPaper = (data[i]-cPaper.r)**2 + (data[i+1]-cPaper.g)**2 + (data[i+2]-cPaper.b)**2;
+                            const finalC = (dInk < dPaper) ? cInk : cPaper;
+                            data[i] = finalC.r; data[i+1] = finalC.g; data[i+2] = finalC.b;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- DITHERING ---
         function applyFloydSteinberg(d, pal, w, h) {
             for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
                 const i = (y*w+x)*4, c = pal[getClosestIdx(d[i],d[i+1],d[i+2], pal)];
@@ -259,33 +296,17 @@
                 d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b;
             }
         }
-        
         function applyJJN(d, pal, w, h) {
              const m = [{dx:1, dy:0, f:7}, {dx:2, dy:0, f:5}, {dx:-2, dy:1, f:3}, {dx:-1, dy:1, f:5}, {dx:0, dy:1, f:7}, {dx:1, dy:1, f:5}, {dx:2, dy:1, f:3}, {dx:-2, dy:2, f:1}, {dx:-1, dy:2, f:3}, {dx:0, dy:2, f:5}, {dx:1, dy:2, f:3}, {dx:2, dy:2, f:1}];
              for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
                 const i=(y*w+x)*4, c=pal[getClosestIdx(d[i],d[i+1],d[i+2],pal)];
                 const er=d[i]-c.r, eg=d[i+1]-c.g, eb=d[i+2]-c.b;
                 d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b;
-                for(let k of m) {
-                    const nx=x+k.dx, ny=y+k.dy;
-                    if(nx>=0 && nx<w && ny<h) addErr(d, (ny*w+nx)*4, er,eg,eb, k.f/48);
-                }
+                for(let k of m) { const nx=x+k.dx, ny=y+k.dy; if(nx>=0 && nx<w && ny<h) addErr(d, (ny*w+nx)*4, er,eg,eb, k.f/48); }
              }
         }
 
-        function updateCodeBlock() {
-            const t = document.getElementById('codeTitle'), o = document.getElementById('codeOutput'), f = state.fileName.toUpperCase();
-            if (state.mode === 'cpc') {
-                t.innerText = "AMSTRAD CPC LOADER:";
-                const inks = state.cpcPal.map(c => `INK ${c.index},${c.hw}`).join(':');
-                o.innerText = `10 MODE ${state.cpcSubMode}\n20 ${inks}\n30 MEMORY &3FFF\n40 LOAD "${f}.BIN",&C000\n50 CALL &C000\n60 GOTO 60`;
-            } else if (state.mode === 'spec') {
-                t.innerText = "ZX SPECTRUM LOADER:"; o.innerText = `10 CLEAR 24999\n20 LOAD "" SCREEN$\n30 PAUSE 0`;
-            } else {
-                t.innerText = "GW-BASIC (CGA):"; o.innerText = `10 SCREEN 1: COLOR 0,0: DEF SEG=&HB800\n20 BLOAD "${f}.BSV",0\n30 INPUT A$`;
-            }
-        }
-
+        // === GENERADORES DE ARCHIVO ===
         function download() {
             if(!state.img) return;
             const px = ctxDest.getImageData(0,0,cvsDest.width, cvsDest.height).data;
@@ -296,43 +317,27 @@
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = state.fileName + ext; a.click();
         }
 
-        // === BIN GENERATORS ===
-
         function genCpcBin(px) {
             const buf = new Uint8Array(16384);
-            const isMode1 = (state.cpcSubMode === 1);
-            
+            const isM1 = (state.cpcSubMode === 1);
             for(let y=0; y<200; y++) {
-                // Cálculo de dirección VRAM entrelazada estándar
                 const lineAddr = ((y >> 3) * 80) + ((y & 7) * 2048);
-
                 for(let xByte=0; xByte<80; xByte++) {
                     let byte = 0;
-                    
-                    if (!isMode1) { 
-                        // --- MODO 0 (2 Píxeles por byte) ---
-                        const idx = (y*160 + xByte*2)*4; // Base index
-                        // Obtener indices de color (0-15)
+                    if (!isM1) { // M0
+                        const idx = (y*160 + xByte*2)*4;
                         const c1 = getClosestIdx(px[idx], px[idx+1], px[idx+2], state.cpcPal);
                         const c2 = getClosestIdx(px[idx+4], px[idx+5], px[idx+6], state.cpcPal);
-                        // Packing Mode 0
                         if(c1&1) byte|=128; if(c1&2) byte|=8; if(c1&4) byte|=32; if(c1&8) byte|=2;
                         if(c2&1) byte|=64;  if(c2&2) byte|=4; if(c2&4) byte|=16; if(c2&8) byte|=1;
-                    } else {
-                        // --- MODO 1 (4 Píxeles por byte) ---
-                        // Pixels are 0,1,2,3 inside the byte
+                    } else { // M1
                         for(let p=0; p<4; p++) {
                             const idx = (y*320 + xByte*4 + p)*4;
-                            const c = getClosestIdx(px[idx], px[idx+1], px[idx+2], state.cpcPal); // 0-3
-                            // Packing Mode 1:
-                            // Pixel 0 (Bits 7,3), Pixel 1 (Bits 6,2), Pixel 2 (Bits 5,1), Pixel 3 (Bits 4,0)
-                            // Bit 1 del color va a los bits altos (7,6,5,4)
+                            const c = getClosestIdx(px[idx], px[idx+1], px[idx+2], state.cpcPal);
                             if(c & 2) byte |= (1 << (7-p));
-                            // Bit 0 del color va a los bits bajos (3,2,1,0)
                             if(c & 1) byte |= (1 << (3-p));
                         }
                     }
-
                     if(lineAddr + xByte < 16384) buf[lineAddr + xByte] = byte;
                 }
             }
@@ -341,18 +346,64 @@
 
         function genSpecScr(px) {
             const buf = new Uint8Array(6912);
-            for(let y=0; y<192; y++) {
-                const addr = ((y>>6)<<11) + ((y&7)<<8) + (((y>>3)&7)<<5);
-                for(let x=0; x<32; x++) {
-                    let b = 0;
-                    for(let bit=0; bit<8; bit++) {
-                        const i = (y*256 + x*8 + bit)*4;
-                        if((px[i]+px[i+1]+px[i+2])/3 > 100) b |= (1<<(7-bit));
+            const isMono = document.getElementById('chkMono').checked;
+
+            if (isMono) {
+                // Modo B/N (Corrección: Tinta Blanca sobre Papel Negro)
+                for(let y=0; y<192; y++) {
+                    const addr = ((y>>6)<<11) + ((y&7)<<8) + (((y>>3)&7)<<5);
+                    for(let x=0; x<32; x++) {
+                        let b = 0;
+                        for(let bit=0; bit<8; bit++) {
+                            const i = (y*256 + x*8 + bit)*4;
+                            if((px[i]+px[i+1]+px[i+2])/3 > 100) b |= (1<<(7-bit)); // Bright = 1
+                        }
+                        buf[addr+x] = b;
                     }
-                    buf[addr+x] = b;
+                }
+                for(let i=6144; i<6912; i++) buf[i] = 7; // Ink 7 (White), Paper 0 (Black)
+            } else {
+                // Modo Color (Por bloques 8x8)
+                for (let by=0; by<24; by++) {
+                    for (let bx=0; bx<32; bx++) {
+                        // 1. Analizar colores
+                        const blockColors = {};
+                        for (let py=0; py<8; py++) {
+                            for (let pxSub=0; pxSub<8; pxSub++) {
+                                const i = ((by*8+py)*256 + (bx*8+pxSub))*4;
+                                const cIdx = getClosestIdx(px[i], px[i+1], px[i+2], PAL_SPEC);
+                                blockColors[cIdx] = (blockColors[cIdx] || 0) + 1;
+                            }
+                        }
+                        // 2. Elegir Ink y Paper
+                        const sorted = Object.keys(blockColors).sort((a,b) => blockColors[b] - blockColors[a]);
+                        let ink = parseInt(sorted[0] || 0); 
+                        let paper = parseInt(sorted[1] || 0);
+                        
+                        // Spectrum Brightness: Ink y Paper comparten Bright
+                        const bright = (ink > 7 || paper > 7) ? 64 : 0;
+                        const finalInk = ink % 8;
+                        const finalPaper = paper % 8;
+                        buf[6144 + by*32 + bx] = bright | (finalPaper << 3) | finalInk;
+
+                        // 3. Generar Bitmap
+                        for (let py=0; py<8; py++) {
+                            const y = by*8 + py;
+                            const addr = ((y>>6)<<11) + ((y&7)<<8) + (((y>>3)&7)<<5);
+                            let byte = 0;
+                            for (let pxSub=0; pxSub<8; pxSub++) {
+                                const x = bx*8 + pxSub;
+                                const i = (y*256 + (bx*8+pxSub))*4;
+                                const cInk = PAL_SPEC[ink], cPaper = PAL_SPEC[paper];
+                                const dInk = (px[i]-cInk.r)**2 + (px[i+1]-cInk.g)**2 + (px[i+2]-cInk.b)**2;
+                                const dPaper = (px[i]-cPaper.r)**2 + (px[i+1]-cPaper.g)**2 + (px[i+2]-cPaper.b)**2;
+                                if (dInk < dPaper) byte |= (1 << (7-pxSub));
+                            }
+                            buf[addr + bx] = byte;
+                        }
+                    }
                 }
             }
-            for(let i=6144; i<6912; i++) buf[i] = 7;
             return buf;
         }
 
@@ -371,6 +422,19 @@
                 }
             }
             return buf;
+        }
+
+        function updateCodeBlock() {
+            const t=document.getElementById('codeTitle'), o=document.getElementById('codeOutput'), f=state.fileName.toUpperCase();
+            if (state.mode === 'cpc') {
+                t.innerText = "AMSTRAD CPC LOADER:";
+                const inks = state.cpcPal.map(c => `INK ${c.index},${c.hw}`).join(':');
+                o.innerText = `10 MODE ${state.cpcSubMode}\n20 ${inks}\n30 MEMORY &3FFF\n40 LOAD "${f}.BIN",&C000\n50 CALL &C000\n60 GOTO 60`;
+            } else if (state.mode === 'spec') {
+                t.innerText = "ZX SPECTRUM LOADER:"; o.innerText = `10 CLEAR 24999\n20 LOAD "" SCREEN$\n30 PAUSE 0`;
+            } else {
+                t.innerText = "GW-BASIC (CGA):"; o.innerText = `10 SCREEN 1: COLOR 0,0: DEF SEG=&HB800\n20 BLOAD "${f}.BSV",0\n30 INPUT A$`;
+            }
         }
 
         init();
