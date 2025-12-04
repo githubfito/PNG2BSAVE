@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <title>Conversor Retro Ultimate (Final Fixed Version)</title>
     <style>
-        body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 900px; }
+        body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; position: relative; }
+        .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 900px; margin-top: 20px; }
         .mode-selection { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
         .mode-selection input { display: none; }
         .mode-selection label { padding: 10px 20px; background: #222; border: 1px solid #555; cursor: pointer; border-radius: 4px; transition: 0.2s; }
@@ -23,9 +23,27 @@
         .label-tag { background: #000; color: #fff; padding: 2px 8px; font-size: 0.8em; margin-bottom: 5px; border-radius: 3px; }
         .code-block { background: #111; border: 1px solid #444; padding: 10px; text-align: left; margin-top: 20px; font-size: 0.8em; color: #ccc; overflow-x: auto; }
         .control-panel { display:none; border-left: 1px solid #555; padding-left: 15px; margin-left: 10px; }
+        
+        /* Estilo para el crédito */
+        .credits-link {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            color: #666;
+            text-decoration: none;
+            font-size: 0.8rem;
+            transition: color 0.3s;
+            z-index: 1000;
+        }
+        .credits-link:hover {
+            color: #aa00aa;
+            text-shadow: 0 0 5px #aa00aa;
+        }
     </style>
 </head>
 <body>
+
+    <a href="https://github.com/githubfito/PNG2BSAVE/tree/main" target="_blank" class="credits-link">by Fitosoft 2025</a>
 
     <div class="main-container">
         <h1>Retro Graphics Converter</h1>
@@ -390,7 +408,7 @@
                                 
                                 if(d1 < d2) byte |= (1<<(7-x));
                             }
-                            buf[addr+bx] = byte; // <--- ERROR CORREGIDO (bx en vez de x)
+                            buf[addr+bx] = byte;
                         }
                     }
                 }
