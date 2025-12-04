@@ -2,12 +2,11 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Conversor Retro Universal (Final)</title>
+    <title>Conversor Retro Universal (Fix Dark Images)</title>
     <style>
         body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 900px; }
         
-        /* Controles */
         .mode-selection { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
         .mode-selection input { display: none; }
         .mode-selection label { padding: 10px 20px; background: #222; border: 1px solid #555; cursor: pointer; border-radius: 4px; transition: 0.2s; }
@@ -20,12 +19,10 @@
         button { background: #aa00aa; font-weight: bold; border: none; padding: 10px 20px; font-size: 1.1em; }
         button:disabled { background: #555; opacity: 0.5; cursor: not-allowed; }
         
-        /* Canvas */
         .canvas-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
         .canvas-box { display: flex; flex-direction: column; align-items: center; }
         canvas { border: 2px solid #fff; background: #000; image-rendering: pixelated; width: auto; height: auto; max-width: 100%; }
         
-        /* Aspect Ratio Classes */
         .aspect-cpc-m0 { width: 640px; height: 400px; }
         .aspect-cpc-m1 { width: 640px; height: 400px; }
         .aspect-spec { width: 512px; height: 384px; }
@@ -183,6 +180,7 @@
             const isSpecMono = (state.mode === 'spec' && document.getElementById('chkMono').checked);
 
             if (state.mode === 'cpc') {
+                // DETECCIÓN USANDO DISTANCIA PONDERADA (Arregla imágenes oscuras)
                 state.cpcPal = detectCpcPalette(ctxOrig, w, h, state.cpcSubMode === 0 ? 16 : 4);
                 activePalette = state.cpcPal;
             } else if (state.mode === 'spec') {
@@ -195,14 +193,10 @@
             const data = imgData.data;
             const algo = document.getElementById('selDither').value;
 
-            // --- APLICACIÓN DE EFECTOS VISUALES ---
-            
+            // --- APLICACIÓN DE EFECTOS ---
             if (state.mode === 'spec') {
-                if (isSpecMono) {
-                    applyMonochrome(data);
-                } else {
-                    applySpectrumClashPreview(data, w, h);
-                }
+                if (isSpecMono) applyMonochrome(data);
+                else applySpectrumClashPreview(data, w, h);
             } else {
                 switch(algo) {
                     case 'fs': applyFloydSteinberg(data, activePalette, w, h); break;
@@ -218,34 +212,68 @@
             document.getElementById('btnDownload').disabled = false;
         }
 
-        // === UTILS & ALGOS ===
-        function detectCpcPalette(ctx, w, h, limit) {
-            const d = ctx.getImageData(0,0,w,h).data, counts = {};
-            for(let i=0; i<d.length; i+=4) counts[`${d[i]},${d[i+1]},${d[i+2]}`] = (counts[`${d[i]},${d[i+1]},${d[i+2]}`] || 0) + 1;
-            const top = Object.keys(counts).sort((a,b) => counts[b] - counts[a]).slice(0,limit);
-            const pal = top.map((rgb, idx) => {
-                const [r,g,b] = rgb.split(',').map(Number);
-                let best = CPC_HW[0], minD = Infinity;
-                for(let c of CPC_HW) { const dist = (r-c.r)**2 + (g-c.g)**2 + (b-c.b)**2; if(dist < minD) { minD = dist; best = c; } }
-                return { index: idx, hw: best.hw, r: best.r, g: best.g, b: best.b };
-            });
-            while(pal.length < limit) pal.push({index:pal.length, hw:0, r:0, g:0, b:0});
-            return pal;
+        // === UTILS DE DISTANCIA (PONDERADA) ===
+        // 2*R^2 + 4*G^2 + 3*B^2 -> Imita la percepción humana mejor que la distancia simple
+        function getDist(r1, g1, b1, r2, g2, b2) {
+            return 2*(r1-r2)**2 + 4*(g1-g2)**2 + 3*(b1-b2)**2;
         }
 
         function getClosestIdx(r,g,b, pal) {
             let min = Infinity, idx = 0;
             for(let i=0; i<pal.length; i++) {
-                const d = (r-pal[i].r)**2 + (g-pal[i].g)**2 + (b-pal[i].b)**2;
+                const d = getDist(r, g, b, pal[i].r, pal[i].g, pal[i].b);
                 if(d < min) { min = d; idx = i; }
             }
             return idx;
         }
 
+        // === DETECCIÓN DE PALETA (Mejorada para imágenes oscuras) ===
+        function detectCpcPalette(ctx, w, h, limit) {
+            const d = ctx.getImageData(0,0,w,h).data;
+            const hwCounts = {}; 
+
+            for(let i=0; i<d.length; i+=4) {
+                // Ignorar transparencia
+                if(d[i+3] < 128) continue;
+
+                const r=d[i], g=d[i+1], b=d[i+2];
+                let bestHw = 0, minD = Infinity;
+                
+                // Buscar el color hardware más cercano usando distancia ponderada
+                for(let c of CPC_HW) {
+                    const dist = getDist(r, g, b, c.r, c.g, c.b);
+                    if(dist < minD) { minD = dist; bestHw = c.hw; }
+                }
+                hwCounts[bestHw] = (hwCounts[bestHw] || 0) + 1;
+            }
+
+            const sortedHwIds = Object.keys(hwCounts).sort((a,b) => hwCounts[b] - hwCounts[a]).slice(0,limit);
+            
+            const pal = sortedHwIds.map((hwId, idx) => {
+                const c = CPC_HW.find(x => x.hw == hwId);
+                return { index: idx, hw: c.hw, r: c.r, g: c.g, b: c.b };
+            });
+
+            while(pal.length < limit) pal.push({index:pal.length, hw:0, r:0, g:0, b:0});
+            return pal;
+        }
+
         function clamp(v) { return Math.max(0, Math.min(255, v)); }
         function addErr(d, i, er, eg, eb, f) { d[i] = clamp(d[i] + er*f); d[i+1] = clamp(d[i+1] + eg*f); d[i+2] = clamp(d[i+2] + eb*f); }
-        function applyNearest(d, pal) { for(let i=0; i<d.length; i+=4) { const c = pal[getClosestIdx(d[i], d[i+1], d[i+2], pal)]; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; } }
-        function applyMonochrome(d) { for(let i=0; i<d.length; i+=4) { const v = (d[i]+d[i+1]+d[i+2])/3 > 127 ? 255 : 0; d[i]=v; d[i+1]=v; d[i+2]=v; } }
+        
+        function applyNearest(d, pal) { 
+            for(let i=0; i<d.length; i+=4) { 
+                const c = pal[getClosestIdx(d[i], d[i+1], d[i+2], pal)]; 
+                d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; 
+            } 
+        }
+        
+        function applyMonochrome(d) { 
+            for(let i=0; i<d.length; i+=4) { 
+                const v = (d[i]+d[i+1]+d[i+2])/3 > 127 ? 255 : 0; 
+                d[i]=v; d[i+1]=v; d[i+2]=v; 
+            } 
+        }
         
         function applySpectrumClashPreview(data, w, h) {
             for (let by = 0; by < h; by += 8) {
@@ -267,8 +295,8 @@
                     for (let y = 0; y < 8; y++) {
                         for (let x = 0; x < 8; x++) {
                             const i = ((by + y) * w + (bx + x)) * 4;
-                            const dInk = (data[i]-cInk.r)**2 + (data[i+1]-cInk.g)**2 + (data[i+2]-cInk.b)**2;
-                            const dPaper = (data[i]-cPaper.r)**2 + (data[i+1]-cPaper.g)**2 + (data[i+2]-cPaper.b)**2;
+                            const dInk = getDist(data[i], data[i+1], data[i+2], cInk.r, cInk.g, cInk.b);
+                            const dPaper = getDist(data[i], data[i+1], data[i+2], cPaper.r, cPaper.g, cPaper.b);
                             const finalC = (dInk < dPaper) ? cInk : cPaper;
                             data[i] = finalC.r; data[i+1] = finalC.g; data[i+2] = finalC.b;
                         }
@@ -277,7 +305,7 @@
             }
         }
 
-        // --- DITHERING ---
+        // --- DITHERING ALGORITHMS ---
         function applyFloydSteinberg(d, pal, w, h) {
             for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
                 const i = (y*w+x)*4, c = pal[getClosestIdx(d[i],d[i+1],d[i+2], pal)];
@@ -306,7 +334,7 @@
              }
         }
 
-        // === GENERADORES DE ARCHIVO ===
+        // === GENERADORES ===
         function download() {
             if(!state.img) return;
             const px = ctxDest.getImageData(0,0,cvsDest.width, cvsDest.height).data;
@@ -324,13 +352,13 @@
                 const lineAddr = ((y >> 3) * 80) + ((y & 7) * 2048);
                 for(let xByte=0; xByte<80; xByte++) {
                     let byte = 0;
-                    if (!isM1) { // M0
+                    if (!isM1) { 
                         const idx = (y*160 + xByte*2)*4;
                         const c1 = getClosestIdx(px[idx], px[idx+1], px[idx+2], state.cpcPal);
                         const c2 = getClosestIdx(px[idx+4], px[idx+5], px[idx+6], state.cpcPal);
                         if(c1&1) byte|=128; if(c1&2) byte|=8; if(c1&4) byte|=32; if(c1&8) byte|=2;
                         if(c2&1) byte|=64;  if(c2&2) byte|=4; if(c2&4) byte|=16; if(c2&8) byte|=1;
-                    } else { // M1
+                    } else { 
                         for(let p=0; p<4; p++) {
                             const idx = (y*320 + xByte*4 + p)*4;
                             const c = getClosestIdx(px[idx], px[idx+1], px[idx+2], state.cpcPal);
@@ -349,24 +377,23 @@
             const isMono = document.getElementById('chkMono').checked;
 
             if (isMono) {
-                // Modo B/N (Corrección: Tinta Blanca sobre Papel Negro)
+                // Modo B/N: Tinta 7 (Blanca), Papel 0 (Negro)
                 for(let y=0; y<192; y++) {
                     const addr = ((y>>6)<<11) + ((y&7)<<8) + (((y>>3)&7)<<5);
                     for(let x=0; x<32; x++) {
                         let b = 0;
                         for(let bit=0; bit<8; bit++) {
                             const i = (y*256 + x*8 + bit)*4;
-                            if((px[i]+px[i+1]+px[i+2])/3 > 100) b |= (1<<(7-bit)); // Bright = 1
+                            if((px[i]+px[i+1]+px[i+2])/3 > 100) b |= (1<<(7-bit));
                         }
                         buf[addr+x] = b;
                     }
                 }
-                for(let i=6144; i<6912; i++) buf[i] = 7; // Ink 7 (White), Paper 0 (Black)
+                for(let i=6144; i<6912; i++) buf[i] = 7; 
             } else {
-                // Modo Color (Por bloques 8x8)
+                // Modo Color (Export)
                 for (let by=0; by<24; by++) {
                     for (let bx=0; bx<32; bx++) {
-                        // 1. Analizar colores
                         const blockColors = {};
                         for (let py=0; py<8; py++) {
                             for (let pxSub=0; pxSub<8; pxSub++) {
@@ -375,18 +402,15 @@
                                 blockColors[cIdx] = (blockColors[cIdx] || 0) + 1;
                             }
                         }
-                        // 2. Elegir Ink y Paper
                         const sorted = Object.keys(blockColors).sort((a,b) => blockColors[b] - blockColors[a]);
                         let ink = parseInt(sorted[0] || 0); 
                         let paper = parseInt(sorted[1] || 0);
                         
-                        // Spectrum Brightness: Ink y Paper comparten Bright
                         const bright = (ink > 7 || paper > 7) ? 64 : 0;
                         const finalInk = ink % 8;
                         const finalPaper = paper % 8;
                         buf[6144 + by*32 + bx] = bright | (finalPaper << 3) | finalInk;
 
-                        // 3. Generar Bitmap
                         for (let py=0; py<8; py++) {
                             const y = by*8 + py;
                             const addr = ((y>>6)<<11) + ((y&7)<<8) + (((y>>3)&7)<<5);
@@ -395,8 +419,8 @@
                                 const x = bx*8 + pxSub;
                                 const i = (y*256 + (bx*8+pxSub))*4;
                                 const cInk = PAL_SPEC[ink], cPaper = PAL_SPEC[paper];
-                                const dInk = (px[i]-cInk.r)**2 + (px[i+1]-cInk.g)**2 + (px[i+2]-cInk.b)**2;
-                                const dPaper = (px[i]-cPaper.r)**2 + (px[i+1]-cPaper.g)**2 + (px[i+2]-cPaper.b)**2;
+                                const dInk = getDist(px[i], px[i+1], px[i+2], cInk.r, cInk.g, cInk.b);
+                                const dPaper = getDist(px[i], px[i+1], px[i+2], cPaper.r, cPaper.g, cPaper.b);
                                 if (dInk < dPaper) byte |= (1 << (7-pxSub));
                             }
                             buf[addr + bx] = byte;
