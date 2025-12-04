@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Conversor Retro Ultimate (Orange Fix V11)</title>
+    <title>Conversor Retro Ultimate (Final Fixed Version)</title>
     <style>
         body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 900px; }
@@ -72,7 +72,6 @@
         // === 1. CONFIGURACIÓN Y TABLAS ===
         function getLuma(r, g, b) { return 0.299*r + 0.587*g + 0.114*b; }
         
-        // Distancia RGB simple (Mejor para mezclas matemáticas)
         function getDistRGB(r1, g1, b1, r2, g2, b2) { 
             return (r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2; 
         }
@@ -102,6 +101,9 @@
 
         // Matriz Bayer 4x4
         const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
+
+        // === NUEVO: Memoria para guardar los atributos calculados en el Preview ===
+        let specAttributes = new Uint8Array(768); 
 
         let state = { mode: 'spec', cpcSubMode: 0, img: null, fileName: 'image', cpcPal: [] };
         const cvsOrig = document.getElementById('cvsOrig'), cvsDest = document.getElementById('cvsDest');
@@ -210,48 +212,34 @@
             return pal;
         }
 
-        // === MOTOR SPECTRUM V11: MIX-AWARE SELECTION ===
-        // Compara el original contra la MEZCLA de los dos colores candidatos.
-        // Si la mezcla es buena, elige esa pareja para que el dithering funcione.
+        // === MOTOR SPECTRUM V11: MIX-AWARE SELECTION & SAVE ATTRIBUTES ===
         function applySpectrumV11(data, w, h, algo) {
             const pairs = [];
-            // Optimización: Solo probar pares que tengan sentido (mismo brillo o contraste fuerte)
             for(let i=0; i<16; i++) for(let j=i; j<16; j++) pairs.push([i,j]);
 
             for (let by = 0; by < h; by += 8) {
                 for (let bx = 0; bx < w; bx += 8) {
                     const blockOrig = [];
-                    // 1. Extraer bloque original
                     for (let y=0;y<8;y++) for (let x=0;x<8;x++) {
                         const i = ((by+y)*w + (bx+x))*4;
                         blockOrig.push({r:data[i], g:data[i+1], b:data[i+2], idx:i, x:x, y:y});
                     }
 
-                    // 2. Buscar mejor pareja considerando la MEZCLA
                     let bestPair = [0, 7];
                     let minError = Infinity;
 
-                    // Reducir candidatos: Mirar solo colores presentes en el bloque + alrededores en RGB
-                    // (Aquí usamos fuerza bruta sobre todos los pares para asegurar el Naranja)
                     for (const pair of pairs) {
                         const c1 = PAL_SPEC[pair[0]];
                         const c2 = PAL_SPEC[pair[1]];
-                        
-                        // Color promedio (Mezcla perfecta al 50%)
                         const mixR = (c1.r + c2.r)/2;
                         const mixG = (c1.g + c2.g)/2;
                         const mixB = (c1.b + c2.b)/2;
 
                         let currentErr = 0;
                         for(const p of blockOrig) {
-                            // Truco: Calculamos el error contra C1, C2 y la MEZCLA.
-                            // Si el pixel se parece a la mezcla, el error es bajo -> Fomenta elegir este par.
                             const dist1 = getDistRGB(p.r, p.g, p.b, c1.r, c1.g, c1.b);
                             const dist2 = getDistRGB(p.r, p.g, p.b, c2.r, c2.g, c2.b);
                             const distMix = getDistRGB(p.r, p.g, p.b, mixR, mixG, mixB);
-                            
-                            // El error de este pixel con este par es la mejor opción de las 3
-                            // Le damos un bono (0.8) a la mezcla para animar el dithering
                             currentErr += Math.min(dist1, dist2, distMix * 0.8);
                         }
 
@@ -261,19 +249,26 @@
                         }
                     }
 
-                    // 3. Renderizar con la pareja ganadora y Dithering Bayer
-                    const ink = PAL_SPEC[bestPair[0]], paper = PAL_SPEC[bestPair[1]];
+                    // --- CAMBIO: GUARDAR ATRIBUTOS PARA EXPORTACIÓN ---
+                    const inkIdx = bestPair[0];
+                    const paperIdx = bestPair[1];
+                    
+                    const bright = (inkIdx > 7 || paperIdx > 7) ? 64 : 0;
+                    const attrByte = bright | ((paperIdx % 8) << 3) | (inkIdx % 8);
+                    
+                    // Guardamos el atributo en memoria para que 'genSpecScr' lo lea después
+                    specAttributes[(by/8)*32 + (bx/8)] = attrByte;
+
+                    // Renderizar en Canvas
+                    const ink = PAL_SPEC[inkIdx], paper = PAL_SPEC[paperIdx];
                     
                     for(const p of blockOrig) {
                         const i = p.idx;
                         let ditherVal = 0;
-                        
-                        // Aplicar Bayer fuerte si el usuario lo eligió, para lograr la mezcla
                         if (algo === 'bayer') {
-                            ditherVal = (BAYER4[p.y%4][p.x%4]/16 - 0.5) * 80; // Fuerza alta para mezclar
+                            ditherVal = (BAYER4[p.y%4][p.x%4]/16 - 0.5) * 80;
                         }
 
-                        // Comparar pixel (modificado por dither) contra Ink y Paper
                         const d1 = getDistRGB(p.r+ditherVal, p.g+ditherVal, p.b+ditherVal, ink.r, ink.g, ink.b);
                         const d2 = getDistRGB(p.r+ditherVal, p.g+ditherVal, p.b+ditherVal, paper.r, paper.g, paper.b);
                         
@@ -367,34 +362,35 @@
                 }
                 for(let i=6144; i<6912; i++) buf[i] = 7;
             } else {
-                // EXPORTACION V11: Se basa en la imagen ya visualizada (tramada)
+                // EXPORTACION V11 FINAL: USA LOS ATRIBUTOS GUARDADOS (SIN RECALCULAR)
                 for (let by=0; by<24; by++) {
                     for (let bx=0; bx<32; bx++) {
-                        // Detectar colores en el bloque tramado
-                        const cols = {};
-                        for(let y=0;y<8;y++) for(let x=0;x<8;x++){
-                            const i=((by*8+y)*256+(bx*8+x))*4;
-                            const c=getClosestIdx(px[i],px[i+1],px[i+2],PAL_SPEC);
-                            cols[c]=(cols[c]||0)+1;
-                        }
-                        const sorted = Object.keys(cols).map(Number).sort((a,b)=>cols[b]-cols[a]);
-                        const ink = sorted[0]||0;
-                        const paper = sorted[1]||ink; 
+                        
+                        // 1. Recuperar atributo decidido en el Preview
+                        const attrByte = specAttributes[by*32 + bx];
+                        buf[6144 + by*32 + bx] = attrByte; 
 
-                        const bright=(ink>7||paper>7)?64:0;
-                        buf[6144+by*32+bx] = bright|(paper%8<<3)|(ink%8);
+                        // 2. Decodificar colores para regenerar los bits
+                        const isBright = (attrByte & 64) !== 0;
+                        const inkIdx = (attrByte & 7) + (isBright ? 8 : 0);
+                        const paperIdx = ((attrByte >> 3) & 7) + (isBright ? 8 : 0);
 
+                        const cInk = PAL_SPEC[inkIdx];
+                        const cPaper = PAL_SPEC[paperIdx];
+
+                        // 3. Generar el patrón de bits para la zona de píxeles
                         for(let y=0;y<8;y++) {
                             const addr = (((by*8+y)>>6)<<11) + (((by*8+y)&7)<<8) + (((by*8+y)>>3&7)<<5);
                             let byte=0;
                             for(let x=0;x<8;x++) {
                                 const i=((by*8+y)*256+(bx*8+x))*4;
-                                const cInk=PAL_SPEC[ink], cPaper=PAL_SPEC[paper];
+                                // Comparamos pixel actual (ya tramado) vs los colores oficiales
                                 const d1=getDistRGB(px[i],px[i+1],px[i+2], cInk.r,cInk.g,cInk.b);
                                 const d2=getDistRGB(px[i],px[i+1],px[i+2], cPaper.r,cPaper.g,cPaper.b);
+                                
                                 if(d1 < d2) byte |= (1<<(7-x));
                             }
-                            buf[addr+x] = byte;
+                            buf[addr+bx] = byte; // <--- ERROR CORREGIDO (bx en vez de x)
                         }
                     }
                 }
