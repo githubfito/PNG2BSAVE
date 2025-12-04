@@ -2,32 +2,24 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Conversor Retro Universal (Fix Dark Images)</title>
+    <title>Conversor Retro Ultimate (Orange Fix V11)</title>
     <style>
         body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 900px; }
-        
         .mode-selection { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
         .mode-selection input { display: none; }
         .mode-selection label { padding: 10px 20px; background: #222; border: 1px solid #555; cursor: pointer; border-radius: 4px; transition: 0.2s; }
         .mode-selection input:checked + label { background: #aa00aa; color: #fff; border-color: #f0f; box-shadow: 0 0 10px #aa00aa; }
-        
         .controls-area { background: #222; padding: 15px; border-radius: 5px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px; }
         .settings-row { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; align-items: center; }
-        
         select, button { padding: 5px 10px; background: #444; color: #fff; border: 1px solid #666; cursor: pointer; }
         button { background: #aa00aa; font-weight: bold; border: none; padding: 10px 20px; font-size: 1.1em; }
         button:disabled { background: #555; opacity: 0.5; cursor: not-allowed; }
-        
         .canvas-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
         .canvas-box { display: flex; flex-direction: column; align-items: center; }
         canvas { border: 2px solid #fff; background: #000; image-rendering: pixelated; width: auto; height: auto; max-width: 100%; }
-        
-        .aspect-cpc-m0 { width: 640px; height: 400px; }
-        .aspect-cpc-m1 { width: 640px; height: 400px; }
-        .aspect-spec { width: 512px; height: 384px; }
-        .aspect-cga { width: 640px; height: 400px; }
-        
+        .aspect-cpc-m0 { width: 640px; height: 400px; } .aspect-cpc-m1 { width: 640px; height: 400px; }
+        .aspect-spec { width: 512px; height: 384px; } .aspect-cga { width: 640px; height: 400px; }
         .label-tag { background: #000; color: #fff; padding: 2px 8px; font-size: 0.8em; margin-bottom: 5px; border-radius: 3px; }
         .code-block { background: #111; border: 1px solid #444; padding: 10px; text-align: left; margin-top: 20px; font-size: 0.8em; color: #ccc; overflow-x: auto; }
         .control-panel { display:none; border-left: 1px solid #555; padding-left: 15px; margin-left: 10px; }
@@ -37,72 +29,62 @@
 
     <div class="main-container">
         <h1>Retro Graphics Converter</h1>
-        
         <div class="mode-selection">
-            <input type="radio" id="mCGA" name="mode" value="cga"> <label for="mCGA">CGA (.BSV)</label>
-            <input type="radio" id="mSpec" name="mode" value="spec"> <label for="mSpec">Spectrum (.SCR)</label>
-            <input type="radio" id="mCPC" name="mode" value="cpc" checked> <label for="mCPC">Amstrad CPC (.BIN)</label>
+            <input type="radio" id="mCGA" name="mode" value="cga"> <label for="mCGA">CGA</label>
+            <input type="radio" id="mSpec" name="mode" value="spec" checked> <label for="mSpec">Spectrum</label>
+            <input type="radio" id="mCPC" name="mode" value="cpc"> <label for="mCPC">Amstrad CPC</label>
         </div>
-
         <div class="controls-area">
             <div class="settings-row">
                 <input type="file" id="fileInput" accept="image/*">
-                <div><input type="checkbox" id="chkResize" checked> <label for="chkResize">Estirar (Full Screen)</label></div>
+                <div><input type="checkbox" id="chkResize" checked> <label for="chkResize">Estirar (Full)</label></div>
             </div>
-
             <div class="settings-row" id="algosRow">
                 <label>Dithering:</label>
                 <select id="selDither">
+                    <option value="bayer" selected>Bayer (Para mezclar)</option>
                     <option value="fs">Floyd-Steinberg</option>
-                    <option value="bayer">Bayer 4x4</option>
                     <option value="jjn">Jarvis-Judice-Ninke</option>
-                    <option value="none" selected>Ninguno</option>
+                    <option value="none">Ninguno</option>
                 </select>
-
-                <div id="cpcControls" class="control-panel" style="display:block;">
-                    <label style="color:#f0f; font-weight:bold;">Modo CPC:</label>
-                    <select id="selCpcMode">
-                        <option value="0">Modo 0 (160x200, 16 Col.)</option>
-                        <option value="1">Modo 1 (320x200, 4 Col.)</option>
-                    </select>
+                <div id="cpcControls" class="control-panel">
+                    <label style="color:#f0f;">Modo CPC:</label> <select id="selCpcMode"><option value="0">Modo 0 (16 Col.)</option><option value="1">Modo 1 (4 Col.)</option></select>
                 </div>
-
                 <div id="cgaControls" class="control-panel">
-                    <select id="selCgaPal"><option value="p1">Paleta 1 (Cian/Mag)</option><option value="p2">Paleta 2 (Ver/Rojo)</option></select>
+                    <select id="selCgaPal"><option value="p1">Paleta 1 (Cian)</option><option value="p2">Paleta 2 (Rojo)</option></select>
                 </div>
-                
-                <div id="specControls" class="control-panel">
+                <div id="specControls" class="control-panel" style="display:block;">
                     <input type="checkbox" id="chkMono"> <label for="chkMono">Forzar B/N</label>
-                    <div style="font-size:0.7em; color:#aaa; margin-top:5px;">(Si es color, simula clash 8x8)</div>
+                    <div style="font-size:0.7em; color:#aaa;">(Motor V11: Detección de Mezclas)</div>
                 </div>
             </div>
-
-            <div class="settings-row">
-                <button id="btnDownload" disabled>💾 Descargar Resultado</button>
-            </div>
+            <div class="settings-row"><button id="btnDownload" disabled>💾 Descargar Resultado</button></div>
             <div id="status">Esperando imagen...</div>
         </div>
-
         <div class="canvas-container">
             <div class="canvas-box"><span class="label-tag">Original</span><canvas id="cvsOrig"></canvas></div>
-            <div class="canvas-box"><span class="label-tag">Vista Previa Retro</span><canvas id="cvsDest"></canvas></div>
+            <div class="canvas-box"><span class="label-tag">Resultado Retro</span><canvas id="cvsDest"></canvas></div>
         </div>
-
-        <div class="code-block">
-            <strong id="codeTitle">Loader Code:</strong>
-            <pre id="codeOutput">...</pre>
-        </div>
+        <div class="code-block"><strong id="codeTitle">Loader Code:</strong><pre id="codeOutput">...</pre></div>
     </div>
 
     <script>
-        // === PALETAS ===
+        // === 1. CONFIGURACIÓN Y TABLAS ===
+        function getLuma(r, g, b) { return 0.299*r + 0.587*g + 0.114*b; }
+        
+        // Distancia RGB simple (Mejor para mezclas matemáticas)
+        function getDistRGB(r1, g1, b1, r2, g2, b2) { 
+            return (r1-r2)**2 + (g1-g2)**2 + (b1-b2)**2; 
+        }
+
         const PAL_SPEC = [
             {r:0,g:0,b:0}, {r:0,g:0,b:215}, {r:215,g:0,b:0}, {r:215,g:0,b:215},
             {r:0,g:215,b:0}, {r:0,g:215,b:215}, {r:215,g:215,b:0}, {r:215,g:215,b:215},
             {r:0,g:0,b:0}, {r:0,g:0,b:255}, {r:255,g:0,b:0}, {r:255,g:0,b:255},
             {r:0,g:255,b:0}, {r:0,g:255,b:255}, {r:255,g:255,b:0}, {r:255,g:255,b:255}
         ];
-        
+        PAL_SPEC.forEach(c => c.l = getLuma(c.r, c.g, c.b));
+
         const PAL_CGA = {
             p1: [{r:0,g:0,b:0}, {r:85,g:255,b:255}, {r:255,g:85,b:255}, {r:255,g:255,b:255}],
             p2: [{r:0,g:0,b:0}, {r:85,g:255,b:85}, {r:255,g:85,b:85}, {r:255,g:255,b:85}]
@@ -118,17 +100,13 @@
             {hw:24,r:255,g:255,b:0}, {hw:25,r:255,g:255,b:128}, {hw:26,r:255,g:255,b:255}
         ];
 
-        const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+        // Matriz Bayer 4x4
+        const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
 
-        // === ESTADO ===
-        let state = { mode: 'cpc', cpcSubMode: 0, img: null, fileName: 'image', cpcPal: [] };
+        let state = { mode: 'spec', cpcSubMode: 0, img: null, fileName: 'image', cpcPal: [] };
+        const cvsOrig = document.getElementById('cvsOrig'), cvsDest = document.getElementById('cvsDest');
+        const ctxOrig = cvsOrig.getContext('2d'), ctxDest = cvsDest.getContext('2d', { willReadFrequently: true });
 
-        const cvsOrig = document.getElementById('cvsOrig');
-        const cvsDest = document.getElementById('cvsDest');
-        const ctxOrig = cvsOrig.getContext('2d');
-        const ctxDest = cvsDest.getContext('2d', { willReadFrequently: true });
-
-        // === INIT ===
         function init() {
             document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', e => updateUI(e.target.value)));
             document.getElementById('fileInput').addEventListener('change', e => {
@@ -138,7 +116,7 @@
             });
             ['chkResize', 'selDither', 'selCgaPal', 'chkMono', 'selCpcMode'].forEach(id => document.getElementById(id).addEventListener('change', process));
             document.getElementById('btnDownload').addEventListener('click', download);
-            updateUI('cpc');
+            updateUI('spec');
         }
 
         function updateUI(m) {
@@ -149,163 +127,164 @@
             process();
         }
 
-        // === PROCESO PRINCIPAL ===
         function process() {
             if (!state.img) return;
             document.getElementById('status').innerText = "Procesando...";
-            
-            let w, h, cssClass;
-            state.cpcSubMode = parseInt(document.getElementById('selCpcMode').value);
+            setTimeout(() => {
+                let w, h, cssClass;
+                state.cpcSubMode = parseInt(document.getElementById('selCpcMode').value);
 
-            if (state.mode === 'cpc') {
-                if (state.cpcSubMode === 0) { w = 160; h = 200; cssClass = 'aspect-cpc-m0'; }
-                else { w = 320; h = 200; cssClass = 'aspect-cpc-m1'; }
-            } else if (state.mode === 'spec') {
-                w = 256; h = 192; cssClass = 'aspect-spec';
-            } else { 
-                w = 320; h = 200; cssClass = 'aspect-cga';
-            }
+                if (state.mode === 'cpc') {
+                    if (state.cpcSubMode === 0) { w = 160; h = 200; cssClass = 'aspect-cpc-m0'; }
+                    else { w = 320; h = 200; cssClass = 'aspect-cpc-m1'; }
+                } else if (state.mode === 'spec') { w = 256; h = 192; cssClass = 'aspect-spec'; }
+                else { w = 320; h = 200; cssClass = 'aspect-cga'; }
 
-            cvsOrig.width = cvsDest.width = w; cvsOrig.height = cvsDest.height = h;
-            cvsOrig.className = cvsDest.className = cssClass;
-            
-            ctxOrig.fillStyle = '#000'; ctxOrig.fillRect(0,0,w,h);
-            if (document.getElementById('chkResize').checked) ctxOrig.drawImage(state.img, 0, 0, w, h);
-            else {
-                const r = Math.min(w/state.img.width, h/state.img.height);
-                ctxOrig.drawImage(state.img, (w-state.img.width*r)/2, (h-state.img.height*r)/2, state.img.width*r, state.img.height*r);
-            }
-
-            let activePalette = [];
-            const isSpecMono = (state.mode === 'spec' && document.getElementById('chkMono').checked);
-
-            if (state.mode === 'cpc') {
-                // DETECCIÓN USANDO DISTANCIA PONDERADA (Arregla imágenes oscuras)
-                state.cpcPal = detectCpcPalette(ctxOrig, w, h, state.cpcSubMode === 0 ? 16 : 4);
-                activePalette = state.cpcPal;
-            } else if (state.mode === 'spec') {
-                activePalette = PAL_SPEC;
-            } else {
-                activePalette = PAL_CGA[document.getElementById('selCgaPal').value];
-            }
-
-            const imgData = ctxOrig.getImageData(0,0,w,h);
-            const data = imgData.data;
-            const algo = document.getElementById('selDither').value;
-
-            // --- APLICACIÓN DE EFECTOS ---
-            if (state.mode === 'spec') {
-                if (isSpecMono) applyMonochrome(data);
-                else applySpectrumClashPreview(data, w, h);
-            } else {
-                switch(algo) {
-                    case 'fs': applyFloydSteinberg(data, activePalette, w, h); break;
-                    case 'bayer': applyBayer(data, activePalette, w, h); break;
-                    case 'jjn': applyJJN(data, activePalette, w, h); break;
-                    default: applyNearest(data, activePalette); break;
+                cvsOrig.width = cvsDest.width = w; cvsOrig.height = cvsDest.height = h;
+                cvsOrig.className = cvsDest.className = cssClass;
+                
+                ctxOrig.fillStyle = '#000'; ctxOrig.fillRect(0,0,w,h);
+                if (document.getElementById('chkResize').checked) ctxOrig.drawImage(state.img, 0, 0, w, h);
+                else {
+                    const r = Math.min(w/state.img.width, h/state.img.height);
+                    ctxOrig.drawImage(state.img, (w-state.img.width*r)/2, (h-state.img.height*r)/2, state.img.width*r, state.img.height*r);
                 }
-            }
 
-            ctxDest.putImageData(imgData, 0, 0);
-            updateCodeBlock();
-            document.getElementById('status').innerText = "✅ Listo";
-            document.getElementById('btnDownload').disabled = false;
+                let activePalette = [];
+                const isSpecMono = (state.mode === 'spec' && document.getElementById('chkMono').checked);
+
+                if (state.mode === 'cpc') {
+                    state.cpcPal = detectCpcPalette(ctxOrig, w, h, state.cpcSubMode === 0 ? 16 : 4);
+                    activePalette = state.cpcPal;
+                } else if (state.mode === 'spec') activePalette = PAL_SPEC;
+                else activePalette = PAL_CGA[document.getElementById('selCgaPal').value];
+
+                const imgData = ctxOrig.getImageData(0,0,w,h);
+                const data = imgData.data;
+                const algo = document.getElementById('selDither').value;
+
+                if (state.mode === 'spec') {
+                    if (isSpecMono) applyMonochrome(data);
+                    else applySpectrumV11(data, w, h, algo); // MOTOR V11
+                } else {
+                    switch(algo) {
+                        case 'fs': applyFloydSteinberg(data, activePalette, w, h); break;
+                        case 'bayer': applyBayer(data, activePalette, w, h); break;
+                        case 'jjn': applyJJN(data, activePalette, w, h); break;
+                        default: applyNearest(data, activePalette); break;
+                    }
+                }
+                ctxDest.putImageData(imgData, 0, 0);
+                updateCodeBlock();
+                document.getElementById('status').innerText = "✅ Listo";
+                document.getElementById('btnDownload').disabled = false;
+            }, 10);
         }
 
-        // === UTILS DE DISTANCIA (PONDERADA) ===
-        // 2*R^2 + 4*G^2 + 3*B^2 -> Imita la percepción humana mejor que la distancia simple
-        function getDist(r1, g1, b1, r2, g2, b2) {
-            return 2*(r1-r2)**2 + 4*(g1-g2)**2 + 3*(b1-b2)**2;
-        }
-
+        // === UTILS ===
         function getClosestIdx(r,g,b, pal) {
             let min = Infinity, idx = 0;
             for(let i=0; i<pal.length; i++) {
-                const d = getDist(r, g, b, pal[i].r, pal[i].g, pal[i].b);
+                const d = getDistRGB(r, g, b, pal[i].r, pal[i].g, pal[i].b);
                 if(d < min) { min = d; idx = i; }
             }
             return idx;
         }
+        function clamp(v) { return Math.max(0, Math.min(255, v)); }
+        function addErr(d, i, er, eg, eb, f) { d[i] = clamp(d[i] + er*f); d[i+1] = clamp(d[i+1] + eg*f); d[i+2] = clamp(d[i+2] + eb*f); }
+        function applyNearest(d, pal) { for(let i=0; i<d.length; i+=4) { const c = pal[getClosestIdx(d[i], d[i+1], d[i+2], pal)]; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; } }
+        function applyMonochrome(d) { for(let i=0; i<d.length; i+=4) { const v = getLuma(d[i],d[i+1],d[i+2]) > 127 ? 255 : 0; d[i]=v; d[i+1]=v; d[i+2]=v; } }
 
-        // === DETECCIÓN DE PALETA (Mejorada para imágenes oscuras) ===
         function detectCpcPalette(ctx, w, h, limit) {
-            const d = ctx.getImageData(0,0,w,h).data;
-            const hwCounts = {}; 
-
+            const d = ctx.getImageData(0,0,w,h).data, hwCounts = {}; 
             for(let i=0; i<d.length; i+=4) {
-                // Ignorar transparencia
                 if(d[i+3] < 128) continue;
-
                 const r=d[i], g=d[i+1], b=d[i+2];
-                let bestHw = 0, minD = Infinity;
-                
-                // Buscar el color hardware más cercano usando distancia ponderada
-                for(let c of CPC_HW) {
-                    const dist = getDist(r, g, b, c.r, c.g, c.b);
-                    if(dist < minD) { minD = dist; bestHw = c.hw; }
-                }
+                let bestHw=0, minD=Infinity;
+                for(let c of CPC_HW) { const dist = getDistRGB(r, g, b, c.r, c.g, c.b); if(dist < minD) { minD = dist; bestHw = c.hw; } }
                 hwCounts[bestHw] = (hwCounts[bestHw] || 0) + 1;
             }
-
             const sortedHwIds = Object.keys(hwCounts).sort((a,b) => hwCounts[b] - hwCounts[a]).slice(0,limit);
-            
-            const pal = sortedHwIds.map((hwId, idx) => {
-                const c = CPC_HW.find(x => x.hw == hwId);
-                return { index: idx, hw: c.hw, r: c.r, g: c.g, b: c.b };
-            });
-
+            const pal = sortedHwIds.map((hwId, idx) => { const c = CPC_HW.find(x => x.hw == hwId); return { index: idx, hw: c.hw, r: c.r, g: c.g, b: c.b }; });
             while(pal.length < limit) pal.push({index:pal.length, hw:0, r:0, g:0, b:0});
             return pal;
         }
 
-        function clamp(v) { return Math.max(0, Math.min(255, v)); }
-        function addErr(d, i, er, eg, eb, f) { d[i] = clamp(d[i] + er*f); d[i+1] = clamp(d[i+1] + eg*f); d[i+2] = clamp(d[i+2] + eb*f); }
-        
-        function applyNearest(d, pal) { 
-            for(let i=0; i<d.length; i+=4) { 
-                const c = pal[getClosestIdx(d[i], d[i+1], d[i+2], pal)]; 
-                d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; 
-            } 
-        }
-        
-        function applyMonochrome(d) { 
-            for(let i=0; i<d.length; i+=4) { 
-                const v = (d[i]+d[i+1]+d[i+2])/3 > 127 ? 255 : 0; 
-                d[i]=v; d[i+1]=v; d[i+2]=v; 
-            } 
-        }
-        
-        function applySpectrumClashPreview(data, w, h) {
+        // === MOTOR SPECTRUM V11: MIX-AWARE SELECTION ===
+        // Compara el original contra la MEZCLA de los dos colores candidatos.
+        // Si la mezcla es buena, elige esa pareja para que el dithering funcione.
+        function applySpectrumV11(data, w, h, algo) {
+            const pairs = [];
+            // Optimización: Solo probar pares que tengan sentido (mismo brillo o contraste fuerte)
+            for(let i=0; i<16; i++) for(let j=i; j<16; j++) pairs.push([i,j]);
+
             for (let by = 0; by < h; by += 8) {
                 for (let bx = 0; bx < w; bx += 8) {
-                    const blockColors = {};
-                    for (let y = 0; y < 8; y++) {
-                        for (let x = 0; x < 8; x++) {
-                            const i = ((by + y) * w + (bx + x)) * 4;
-                            const idx = getClosestIdx(data[i], data[i+1], data[i+2], PAL_SPEC);
-                            blockColors[idx] = (blockColors[idx] || 0) + 1;
+                    const blockOrig = [];
+                    // 1. Extraer bloque original
+                    for (let y=0;y<8;y++) for (let x=0;x<8;x++) {
+                        const i = ((by+y)*w + (bx+x))*4;
+                        blockOrig.push({r:data[i], g:data[i+1], b:data[i+2], idx:i, x:x, y:y});
+                    }
+
+                    // 2. Buscar mejor pareja considerando la MEZCLA
+                    let bestPair = [0, 7];
+                    let minError = Infinity;
+
+                    // Reducir candidatos: Mirar solo colores presentes en el bloque + alrededores en RGB
+                    // (Aquí usamos fuerza bruta sobre todos los pares para asegurar el Naranja)
+                    for (const pair of pairs) {
+                        const c1 = PAL_SPEC[pair[0]];
+                        const c2 = PAL_SPEC[pair[1]];
+                        
+                        // Color promedio (Mezcla perfecta al 50%)
+                        const mixR = (c1.r + c2.r)/2;
+                        const mixG = (c1.g + c2.g)/2;
+                        const mixB = (c1.b + c2.b)/2;
+
+                        let currentErr = 0;
+                        for(const p of blockOrig) {
+                            // Truco: Calculamos el error contra C1, C2 y la MEZCLA.
+                            // Si el pixel se parece a la mezcla, el error es bajo -> Fomenta elegir este par.
+                            const dist1 = getDistRGB(p.r, p.g, p.b, c1.r, c1.g, c1.b);
+                            const dist2 = getDistRGB(p.r, p.g, p.b, c2.r, c2.g, c2.b);
+                            const distMix = getDistRGB(p.r, p.g, p.b, mixR, mixG, mixB);
+                            
+                            // El error de este pixel con este par es la mejor opción de las 3
+                            // Le damos un bono (0.8) a la mezcla para animar el dithering
+                            currentErr += Math.min(dist1, dist2, distMix * 0.8);
+                        }
+
+                        if (currentErr < minError) {
+                            minError = currentErr;
+                            bestPair = pair;
                         }
                     }
-                    const sorted = Object.keys(blockColors).sort((a,b) => blockColors[b] - blockColors[a]);
-                    const inkIdx = parseInt(sorted[0] || 0); 
-                    const paperIdx = parseInt(sorted[1] || 0);
-                    const cInk = PAL_SPEC[inkIdx];
-                    const cPaper = PAL_SPEC[paperIdx];
 
-                    for (let y = 0; y < 8; y++) {
-                        for (let x = 0; x < 8; x++) {
-                            const i = ((by + y) * w + (bx + x)) * 4;
-                            const dInk = getDist(data[i], data[i+1], data[i+2], cInk.r, cInk.g, cInk.b);
-                            const dPaper = getDist(data[i], data[i+1], data[i+2], cPaper.r, cPaper.g, cPaper.b);
-                            const finalC = (dInk < dPaper) ? cInk : cPaper;
-                            data[i] = finalC.r; data[i+1] = finalC.g; data[i+2] = finalC.b;
+                    // 3. Renderizar con la pareja ganadora y Dithering Bayer
+                    const ink = PAL_SPEC[bestPair[0]], paper = PAL_SPEC[bestPair[1]];
+                    
+                    for(const p of blockOrig) {
+                        const i = p.idx;
+                        let ditherVal = 0;
+                        
+                        // Aplicar Bayer fuerte si el usuario lo eligió, para lograr la mezcla
+                        if (algo === 'bayer') {
+                            ditherVal = (BAYER4[p.y%4][p.x%4]/16 - 0.5) * 80; // Fuerza alta para mezclar
                         }
+
+                        // Comparar pixel (modificado por dither) contra Ink y Paper
+                        const d1 = getDistRGB(p.r+ditherVal, p.g+ditherVal, p.b+ditherVal, ink.r, ink.g, ink.b);
+                        const d2 = getDistRGB(p.r+ditherVal, p.g+ditherVal, p.b+ditherVal, paper.r, paper.g, paper.b);
+                        
+                        const finalC = (d1 < d2) ? ink : paper;
+                        data[i] = finalC.r; data[i+1] = finalC.g; data[i+2] = finalC.b;
                     }
                 }
             }
         }
 
-        // --- DITHERING ALGORITHMS ---
+        // --- DITHERING CGA/CPC ---
         function applyFloydSteinberg(d, pal, w, h) {
             for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
                 const i = (y*w+x)*4, c = pal[getClosestIdx(d[i],d[i+1],d[i+2], pal)];
@@ -319,7 +298,7 @@
         }
         function applyBayer(d, pal, w, h) {
             for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
-                const i = (y*w+x)*4, t = (BAYER[y%4][x%4]/17)-0.5, f=40;
+                const i = (y*w+x)*4, t = (BAYER4[y%4][x%4]/16)-0.5, f=40;
                 const c = pal[getClosestIdx(clamp(d[i]+t*f), clamp(d[i+1]+t*f), clamp(d[i+2]+t*f), pal)];
                 d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b;
             }
@@ -374,56 +353,48 @@
 
         function genSpecScr(px) {
             const buf = new Uint8Array(6912);
-            const isMono = document.getElementById('chkMono').checked;
-
-            if (isMono) {
-                // Modo B/N: Tinta 7 (Blanca), Papel 0 (Negro)
+            if (document.getElementById('chkMono').checked) {
                 for(let y=0; y<192; y++) {
                     const addr = ((y>>6)<<11) + ((y&7)<<8) + (((y>>3)&7)<<5);
                     for(let x=0; x<32; x++) {
                         let b = 0;
                         for(let bit=0; bit<8; bit++) {
                             const i = (y*256 + x*8 + bit)*4;
-                            if((px[i]+px[i+1]+px[i+2])/3 > 100) b |= (1<<(7-bit));
+                            if(getLuma(px[i],px[i+1],px[i+2]) > 100) b |= (1<<(7-bit));
                         }
                         buf[addr+x] = b;
                     }
                 }
-                for(let i=6144; i<6912; i++) buf[i] = 7; 
+                for(let i=6144; i<6912; i++) buf[i] = 7;
             } else {
-                // Modo Color (Export)
+                // EXPORTACION V11: Se basa en la imagen ya visualizada (tramada)
                 for (let by=0; by<24; by++) {
                     for (let bx=0; bx<32; bx++) {
-                        const blockColors = {};
-                        for (let py=0; py<8; py++) {
-                            for (let pxSub=0; pxSub<8; pxSub++) {
-                                const i = ((by*8+py)*256 + (bx*8+pxSub))*4;
-                                const cIdx = getClosestIdx(px[i], px[i+1], px[i+2], PAL_SPEC);
-                                blockColors[cIdx] = (blockColors[cIdx] || 0) + 1;
-                            }
+                        // Detectar colores en el bloque tramado
+                        const cols = {};
+                        for(let y=0;y<8;y++) for(let x=0;x<8;x++){
+                            const i=((by*8+y)*256+(bx*8+x))*4;
+                            const c=getClosestIdx(px[i],px[i+1],px[i+2],PAL_SPEC);
+                            cols[c]=(cols[c]||0)+1;
                         }
-                        const sorted = Object.keys(blockColors).sort((a,b) => blockColors[b] - blockColors[a]);
-                        let ink = parseInt(sorted[0] || 0); 
-                        let paper = parseInt(sorted[1] || 0);
-                        
-                        const bright = (ink > 7 || paper > 7) ? 64 : 0;
-                        const finalInk = ink % 8;
-                        const finalPaper = paper % 8;
-                        buf[6144 + by*32 + bx] = bright | (finalPaper << 3) | finalInk;
+                        const sorted = Object.keys(cols).map(Number).sort((a,b)=>cols[b]-cols[a]);
+                        const ink = sorted[0]||0;
+                        const paper = sorted[1]||ink; 
 
-                        for (let py=0; py<8; py++) {
-                            const y = by*8 + py;
-                            const addr = ((y>>6)<<11) + ((y&7)<<8) + (((y>>3)&7)<<5);
-                            let byte = 0;
-                            for (let pxSub=0; pxSub<8; pxSub++) {
-                                const x = bx*8 + pxSub;
-                                const i = (y*256 + (bx*8+pxSub))*4;
-                                const cInk = PAL_SPEC[ink], cPaper = PAL_SPEC[paper];
-                                const dInk = getDist(px[i], px[i+1], px[i+2], cInk.r, cInk.g, cInk.b);
-                                const dPaper = getDist(px[i], px[i+1], px[i+2], cPaper.r, cPaper.g, cPaper.b);
-                                if (dInk < dPaper) byte |= (1 << (7-pxSub));
+                        const bright=(ink>7||paper>7)?64:0;
+                        buf[6144+by*32+bx] = bright|(paper%8<<3)|(ink%8);
+
+                        for(let y=0;y<8;y++) {
+                            const addr = (((by*8+y)>>6)<<11) + (((by*8+y)&7)<<8) + (((by*8+y)>>3&7)<<5);
+                            let byte=0;
+                            for(let x=0;x<8;x++) {
+                                const i=((by*8+y)*256+(bx*8+x))*4;
+                                const cInk=PAL_SPEC[ink], cPaper=PAL_SPEC[paper];
+                                const d1=getDistRGB(px[i],px[i+1],px[i+2], cInk.r,cInk.g,cInk.b);
+                                const d2=getDistRGB(px[i],px[i+1],px[i+2], cPaper.r,cPaper.g,cPaper.b);
+                                if(d1 < d2) byte |= (1<<(7-x));
                             }
-                            buf[addr + bx] = byte;
+                            buf[addr+x] = byte;
                         }
                     }
                 }
