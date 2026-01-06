@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Retro Graphics Converter Ultimate (VGA Edition)</title>
+    <title>Retro Graphics Converter Ultimate (Reload Fix)</title>
     <style>
         body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; position: relative; }
         .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 950px; margin-top: 20px; }
@@ -12,7 +12,8 @@
         .mode-selection input:checked + label { background: #aa00aa; color: #fff; border-color: #f0f; box-shadow: 0 0 10px #aa00aa; }
         .controls-area { background: #222; padding: 15px; border-radius: 5px; margin-bottom: 20px; display: flex; flex-direction: column; gap: 15px; }
         .settings-row { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; align-items: center; }
-        select, button { padding: 5px 10px; background: #444; color: #fff; border: 1px solid #666; cursor: pointer; }
+        select, button, input[type="file"], input[type="number"] { padding: 5px 10px; background: #444; color: #fff; border: 1px solid #666; cursor: pointer; }
+        input[type="number"] { width: 50px; text-align: center; border: 1px solid #aa00aa; background: #220022; color:#fff; }
         button { background: #aa00aa; font-weight: bold; border: none; padding: 10px 20px; font-size: 1.1em; }
         button:disabled { background: #555; opacity: 0.5; cursor: not-allowed; }
         .canvas-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
@@ -25,6 +26,17 @@
         .control-panel { display:none; border-left: 1px solid #555; padding-left: 15px; margin-left: 10px; }
         .credits-link { position: absolute; top: 15px; right: 20px; color: #666; text-decoration: none; font-size: 0.8rem; transition: color 0.3s; z-index: 1000; }
         .credits-link:hover { color: #aa00aa; text-shadow: 0 0 5px #aa00aa; }
+        .asm-alert { color: #ff0; font-size: 0.9em; margin-top: 5px; display: none; }
+        
+        .size-selector-group { display: flex; gap: 10px; align-items: center; background: #442244; padding: 10px; border-radius: 4px; border: 1px solid #aa00aa; flex-wrap: wrap; justify-content: center;}
+        .size-selector-group label { color: #f0f; font-size: 0.8em; font-weight: bold; text-transform: uppercase; }
+        .divider { width: 1px; height: 30px; background: #aa00aa; margin: 0 10px; }
+        .sheet-info { margin-top: 5px; font-size: 0.8em; color: #aaa; width: 100%; text-align: center; }
+
+        .palette-display { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 10px; padding: 10px; background: #111; border: 1px solid #444; border-radius: 4px; }
+        .pal-swatch { display: flex; flex-direction: column; align-items: center; background: #222; border: 1px solid #555; padding: 3px; border-radius: 3px; min-width: 60px; }
+        .pal-color { width: 30px; height: 15px; border: 1px solid #fff; margin-bottom: 3px; }
+        .pal-text { font-size: 0.7em; color: #ccc; }
     </style>
 </head>
 <body>
@@ -35,15 +47,60 @@
         <h1>Retro Graphics Converter</h1>
         <div class="mode-selection">
             <input type="radio" id="mCGA" name="mode" value="cga"> <label for="mCGA">CGA</label>
-            <input type="radio" id="mSpec" name="mode" value="spec" checked> <label for="mSpec">Spectrum</label>
-            <input type="radio" id="mCPC" name="mode" value="cpc"> <label for="mCPC">Amstrad CPC</label>
+            <input type="radio" id="mSpec" name="mode" value="spec"> <label for="mSpec">Spectrum</label>
+            <input type="radio" id="mCPC" name="mode" value="cpc"> <label for="mCPC">CPC (Screen)</label>
+            <input type="radio" id="m8BP" name="mode" value="8bp" checked> <label for="m8BP">8BP (ASM)</label>
             <input type="radio" id="mVGA" name="mode" value="vga"> <label for="mVGA">VGA (M13h)</label>
         </div>
         <div class="controls-area">
             <div class="settings-row">
-                <input type="file" id="fileInput" accept="image/*">
-                <div><input type="checkbox" id="chkResize" checked> <label for="chkResize">Estirar (Full)</label></div>
+                <div>
+                    <span class="label-tag">IMAGEN:</span>
+                    <input type="file" id="fileInput" accept="image/*">
+                </div>
+                <div><input type="checkbox" id="chkResize" checked> <label for="chkResize">Estirar / Full</label></div>
             </div>
+
+            <div class="settings-row" id="row8bp" style="display:none; background:#2a2a2a; padding:10px; border:1px dashed #aa00aa; flex-direction:column; gap:10px;">
+                <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+                    <span class="label-tag" style="color:#f0f">ARCHIVO ASM:</span>
+                    <input type="file" id="asmInput" accept=".asm,.txt">
+                    <div id="asmStatus" class="asm-alert">Esperando archivo ASM...</div>
+                </div>
+                
+                <div id="sizeControls" class="size-selector-group" style="display:none;">
+                    <div style="display:flex; align-items:center; gap:5px;">
+                        <input type="checkbox" id="chkSpriteSheet">
+                        <label for="chkSpriteSheet" style="color:#fff; cursor:pointer;">MODO SPRITESHEET</label>
+                    </div>
+                    <div class="divider"></div>
+                    <div style="display:flex; flex-direction:column; align-items:center;">
+                        <label style="color:#fff; font-size:0.7em;">TAMAÑO UN SPRITE (PX)</label>
+                        <div style="display:flex; gap:5px;">
+                            <select id="selSizeX"></select>
+                            <span style="color:#666">x</span>
+                            <select id="selSizeY"></select>
+                        </div>
+                    </div>
+                    <div id="gridInputs" style="display:none; align-items:center; gap:10px;">
+                        <div class="divider"></div>
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <label style="color:#fff; font-size:0.7em;">CANTIDAD A EXTRAER</label>
+                            <div style="display:flex; gap:5px; align-items:center;">
+                                <label>Cols:</label> <input type="number" id="inpCols" min="1" value="1">
+                                <label>Filas:</label> <input type="number" id="inpRows" min="1" value="1">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="finalSizeInfo" class="sheet-info"></div>
+                </div>
+            </div>
+
+            <div id="palettePanel" style="display:none; width:100%;">
+                <span class="label-tag" style="background:#444; border:1px solid #777;">PALETA DETECTADA (Sugerencia):</span>
+                <div id="paletteContainer" class="palette-display"></div>
+            </div>
+
             <div class="settings-row" id="algosRow">
                 <label>Dithering:</label>
                 <select id="selDither">
@@ -53,7 +110,12 @@
                     <option value="none">Ninguno</option>
                 </select>
                 <div id="cpcControls" class="control-panel">
-                    <label style="color:#f0f;">Modo:</label> <select id="selCpcMode"><option value="0">Modo 0 (16 Col.)</option><option value="1">Modo 1 (4 Col.)</option></select>
+                    <label style="color:#f0f;">Modo CPC:</label> 
+                    <select id="selCpcMode">
+                        <option value="0">Modo 0 (16 Col)</option>
+                        <option value="1">Modo 1 (4 Col)</option>
+                        <option value="2">Modo 2 (2 Col)</option>
+                    </select>
                 </div>
                 <div id="cgaControls" class="control-panel">
                     <select id="selCgaPal"><option value="p1">Paleta 1 (Cian)</option><option value="p2">Paleta 2 (Rojo)</option></select>
@@ -70,8 +132,8 @@
             <div id="status">Esperando imagen...</div>
         </div>
         <div class="canvas-container">
-            <div class="canvas-box"><span class="label-tag">Original</span><canvas id="cvsOrig"></canvas></div>
-            <div class="canvas-box"><span class="label-tag">Resultado Retro</span><canvas id="cvsDest"></canvas></div>
+            <div class="canvas-box"><span class="label-tag">Imagen Original (Re-escalada)</span><canvas id="cvsOrig"></canvas></div>
+            <div class="canvas-box"><span class="label-tag" id="lblRes">Preview 1er Sprite</span><canvas id="cvsDest"></canvas></div>
         </div>
         <div class="code-block"><strong id="codeTitle">Loader Code:</strong><pre id="codeOutput">...</pre></div>
     </div>
@@ -88,71 +150,226 @@
             {r:0,g:0,b:0}, {r:0,g:0,b:255}, {r:255,g:0,b:0}, {r:255,g:255,b:255},
             {r:0,g:255,b:0}, {r:0,g:255,b:255}, {r:255,g:255,b:0}, {r:255,g:255,b:255}
         ];
-
         const PAL_CGA = {
             p1: [{r:0,g:0,b:0}, {r:85,g:255,b:255}, {r:255,g:85,b:255}, {r:255,g:255,b:255}],
             p2: [{r:0,g:0,b:0}, {r:85,g:255,b:85}, {r:255,g:85,b:85}, {r:255,g:255,b:85}]
         };
-
         const CPC_HW = [{hw:0,r:0,g:0,b:0}, {hw:1,r:0,g:0,b:128}, {hw:2,r:0,g:0,b:255}, {hw:3,r:128,g:0,b:0}, {hw:4,r:128,g:0,b:128}, {hw:5,r:128,g:0,b:255}, {hw:6,r:255,g:0,b:0}, {hw:7,r:255,g:0,b:128}, {hw:8,r:255,g:0,b:255}, {hw:9,r:0,g:128,b:0}, {hw:10,r:0,g:128,b:128}, {hw:11,r:0,g:128,b:255}, {hw:12,r:128,g:128,b:0}, {hw:13,r:128,g:128,b:128}, {hw:14,r:128,g:128,b:255}, {hw:15,r:255,g:128,b:0}, {hw:16,r:255,g:128,b:128}, {hw:17,r:255,g:128,b:255}, {hw:18,r:0,g:255,b:0}, {hw:19,r:0,g:255,b:128}, {hw:20,r:0,g:255,b:255}, {hw:21,r:128,g:255,b:0}, {hw:22,r:128,g:255,b:128}, {hw:23,r:128,g:255,b:255}, {hw:24,r:255,g:255,b:0}, {hw:25,r:255,g:255,b:128}, {hw:26,r:255,g:255,b:255}];
-
         const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
 
         let specAttributes = new Uint8Array(768); 
-        let state = { mode: 'spec', cpcSubMode: 0, img: null, fileName: 'image', cpcPal: [], vgaPal: [] };
+        let state = { mode: '8bp', cpcSubMode: 0, img: null, fileName: 'image', asmContent: null, cpcPal: [], vgaPal: [], spritesToInject: [] };
         
         const cvsOrig = document.getElementById('cvsOrig'), cvsDest = document.getElementById('cvsDest');
         const ctxOrig = cvsOrig.getContext('2d'), ctxDest = cvsDest.getContext('2d', { willReadFrequently: true });
 
         function init() {
+            const selX = document.getElementById('selSizeX');
+            const selY = document.getElementById('selSizeY');
+            for(let i=8; i<=128; i+=8) {
+                const optX = new Option(i + " px", i);
+                const optY = new Option(i + " px", i);
+                if(i===16) { optX.selected = true; optY.selected = true; }
+                selX.add(optX);
+                selY.add(optY);
+            }
+
             document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', e => updateUI(e.target.value)));
+            
             document.getElementById('fileInput').addEventListener('change', e => {
                 const f = e.target.files[0]; if (!f) return;
+                
+                // Clear input to allow reload same file
+                e.target.value = '';
+
+                if (state.mode === '8bp' && !state.asmContent) {
+                    alert("⚠️ IMPORTANTE:\n\nPara usar el modo 8BP, carga primero tu archivo 'images.asm'.");
+                }
+
                 state.fileName = f.name.split('.')[0].replace(/[^a-z0-9]/gi, '_');
-                const img = new Image(); img.onload = () => { state.img = img; process(); }; img.src = URL.createObjectURL(f);
+                const img = new Image(); 
+                img.onload = () => { 
+                    state.img = img; 
+                    autoCalcGrid(); 
+                    process(); 
+                }; 
+                img.src = URL.createObjectURL(f);
             });
-            ['chkResize', 'selDither', 'selCgaPal', 'chkMono', 'selCpcMode', 'selVgaType'].forEach(id => document.getElementById(id).addEventListener('change', process));
+
+            document.getElementById('asmInput').addEventListener('change', e => {
+                const f = e.target.files[0]; if(!f) return;
+                const r = new FileReader();
+                r.onload = (ev) => {
+                    const content = ev.target.result;
+                    const st = document.getElementById('asmStatus');
+                    if (content.indexOf("_BEGIN_IMAGES") === -1 || content.indexOf("_END_IMAGES") === -1) {
+                        alert("❌ ERROR: El ASM debe contener _BEGIN_IMAGES y _END_IMAGES.");
+                        state.asmContent = null;
+                        st.innerText = "❌ ASM INVÁLIDO"; st.style.color = "#f00"; st.style.display="block"; e.target.value = ''; return;
+                    }
+                    state.asmContent = content;
+                    st.innerText = "✅ ASM Validado"; st.style.display="block"; st.style.color="#0f0";
+                    updateCodeBlock();
+                };
+                r.readAsText(f);
+                
+                // FIX: Permitir recargar mismo ASM si se modifica externamente
+                e.target.value = '';
+            });
+
+            ['selDither', 'selCgaPal', 'chkMono', 'selCpcMode', 'selVgaType', 'selSizeX', 'selSizeY', 'inpCols', 'inpRows'].forEach(id => document.getElementById(id).addEventListener('change', process));
+            
+            document.getElementById('chkResize').addEventListener('change', e => {
+                const isFull = e.target.checked;
+                const is8BP = state.mode === '8bp';
+                document.getElementById('sizeControls').style.display = (!isFull && is8BP) ? 'flex' : 'none';
+                process();
+            });
+
+            document.getElementById('chkSpriteSheet').addEventListener('change', e => {
+                const isSheet = e.target.checked;
+                document.getElementById('gridInputs').style.display = isSheet ? 'flex' : 'none';
+                if(isSheet) autoCalcGrid();
+                process();
+            });
+
             document.getElementById('btnDownload').addEventListener('click', download);
-            updateUI('spec');
+            updateUI('8bp');
+        }
+
+        // Sugerencia inicial de grid (solo al cargar o activar)
+        function autoCalcGrid() {
+            if(!state.img || !document.getElementById('chkSpriteSheet').checked) return;
+            const sw = parseInt(document.getElementById('selSizeX').value);
+            const sh = parseInt(document.getElementById('selSizeY').value);
+            const cols = Math.floor(state.img.width / sw);
+            const rows = Math.floor(state.img.height / sh);
+            document.getElementById('inpCols').value = Math.max(1, cols);
+            document.getElementById('inpRows').value = Math.max(1, rows);
         }
 
         function updateUI(m) {
             state.mode = m;
             document.getElementById('cgaControls').style.display = (m==='cga') ? 'block' : 'none';
             document.getElementById('specControls').style.display = (m==='spec') ? 'block' : 'none';
-            document.getElementById('cpcControls').style.display = (m==='cpc') ? 'block' : 'none';
+            document.getElementById('cpcControls').style.display = (m==='cpc' || m==='8bp') ? 'block' : 'none';
             document.getElementById('vgaControls').style.display = (m==='vga') ? 'block' : 'none';
+            document.getElementById('row8bp').style.display = (m==='8bp') ? 'flex' : 'none';
+            
+            const isFull = document.getElementById('chkResize').checked;
+            document.getElementById('sizeControls').style.display = (!isFull && m === '8bp') ? 'flex' : 'none';
             process();
+        }
+
+        function renderPalette(pal) {
+            const container = document.getElementById('paletteContainer');
+            const panel = document.getElementById('palettePanel');
+            container.innerHTML = "";
+            
+            if (!pal || pal.length === 0) {
+                panel.style.display = 'none';
+                return;
+            }
+            panel.style.display = 'block';
+            pal.forEach((c, idx) => {
+                if (c.hw === undefined) return;
+                const swatch = document.createElement('div');
+                swatch.className = 'pal-swatch';
+                const colorBox = document.createElement('div');
+                colorBox.className = 'pal-color';
+                colorBox.style.backgroundColor = `rgb(${c.r},${c.g},${c.b})`;
+                const info = document.createElement('div');
+                info.className = 'pal-text';
+                info.innerHTML = `INK ${idx}<br>HW ${c.hw}`;
+                swatch.appendChild(colorBox);
+                swatch.appendChild(info);
+                container.appendChild(swatch);
+            });
+        }
+
+        function getPaletteText() {
+            if (!state.cpcPal || state.cpcPal.length === 0) return "";
+            let s = "\n\n; --- PALETA UTILIZADA ---\n";
+            state.cpcPal.forEach(c => { if(c.hw !== undefined) s += `; Ink ${c.index},${c.hw}\n`; });
+            s += "\n; --- FORMATO 8BP / C ---\n";
+            state.cpcPal.forEach(c => { if(c.hw !== undefined) s += `_basic_ink(${c.index},${c.hw});\n`; });
+            return s;
         }
 
         function process() {
             if (!state.img) return;
             document.getElementById('status').innerText = "Procesando...";
+            state.spritesToInject = []; 
+
             setTimeout(() => {
                 let w, h, cssClass;
                 state.cpcSubMode = parseInt(document.getElementById('selCpcMode').value);
+                const isFull = document.getElementById('chkResize').checked;
+                const isSheet = document.getElementById('chkSpriteSheet').checked;
 
-                if (state.mode === 'cpc') {
-                    if (state.cpcSubMode === 0) { w = 160; h = 200; cssClass = 'aspect-cpc-m0'; }
-                    else { w = 320; h = 200; cssClass = 'aspect-cpc-m1'; }
-                } else if (state.mode === 'spec') { w = 256; h = 192; cssClass = 'aspect-spec'; }
-                else if (state.mode === 'vga') { w = 320; h = 200; cssClass = 'aspect-vga'; }
-                else { w = 320; h = 200; cssClass = 'aspect-cga'; }
+                // --- 1. DEFINIR TAMAÑO DEL LIENZO DE TRABAJO (SCALING) ---
+                if (state.mode === '8bp') {
+                    cssClass = 'aspect-cpc-m0'; 
+                    if (isSheet && !isFull) {
+                        const spW = parseInt(document.getElementById('selSizeX').value);
+                        const spH = parseInt(document.getElementById('selSizeY').value);
+                        const cols = parseInt(document.getElementById('inpCols').value);
+                        const rows = parseInt(document.getElementById('inpRows').value);
+                        w = spW * cols;
+                        h = spH * rows;
+                        document.getElementById('finalSizeInfo').innerText = `Rejilla Total: ${w}x${h} px (${cols}x${rows} Sprites)`;
+                    } else if (isFull) {
+                        w = state.img.width; h = state.img.height;
+                        if(state.cpcSubMode === 0 && w % 2 !== 0) w++; 
+                        if(state.cpcSubMode === 1 && w % 4 !== 0) w += (4 - w%4);
+                    } else {
+                        w = parseInt(document.getElementById('selSizeX').value);
+                        h = parseInt(document.getElementById('selSizeY').value);
+                        document.getElementById('finalSizeInfo').innerText = `Tamaño Unico: ${w}x${h} px`;
+                    }
+                } 
+                else if (state.mode === 'cpc') {
+                    if (state.cpcSubMode === 0) { w = 160; h = 200; cssClass='aspect-cpc-m0'; }
+                    else { w = 320; h = 200; cssClass='aspect-cpc-m1'; }
+                } else if (state.mode === 'spec') { w = 256; h = 192; cssClass='aspect-spec'; }
+                else if (state.mode === 'vga') { w = 320; h = 200; cssClass='aspect-vga'; }
+                else { w = 320; h = 200; cssClass='aspect-cga'; }
 
-                cvsOrig.width = cvsDest.width = w; cvsOrig.height = cvsDest.height = h;
-                cvsOrig.className = cvsDest.className = cssClass;
+                cvsOrig.width = w; cvsOrig.height = h;
+                cvsOrig.className = cssClass;
+                ctxOrig.fillStyle = '#ff00ff'; ctxOrig.fillRect(0,0,w,h);
                 
-                ctxOrig.fillStyle = '#000'; ctxOrig.fillRect(0,0,w,h);
-                if (document.getElementById('chkResize').checked) ctxOrig.drawImage(state.img, 0, 0, w, h);
-                else {
-                    const r = Math.min(w/state.img.width, h/state.img.height);
-                    ctxOrig.drawImage(state.img, (w-state.img.width*r)/2, (h-state.img.height*r)/2, state.img.width*r, state.img.height*r);
+                // --- DIBUJADO CORREGIDO ---
+                if (state.mode === '8bp') {
+                    if (!isFull) {
+                        ctxOrig.drawImage(state.img, 0, 0, w, h);
+                    } else {
+                        ctxOrig.drawImage(state.img, 0, 0, state.img.width, state.img.height);
+                    }
+                } else {
+                    if (document.getElementById('chkResize').checked) {
+                        ctxOrig.drawImage(state.img, 0, 0, w, h);
+                    } else {
+                        const scale = Math.min(w / state.img.width, h / state.img.height);
+                        const dw = state.img.width * scale;
+                        const dh = state.img.height * scale;
+                        const dx = (w - dw) / 2;
+                        const dy = (h - dh) / 2;
+                        ctxOrig.drawImage(state.img, dx, dy, dw, dh);
+                    }
                 }
 
+                // --- 2. PALETA ---
                 let activePalette = [];
-                if (state.mode === 'cpc') {
-                    state.cpcPal = detectCpcPalette(ctxOrig, w, h, state.cpcSubMode === 0 ? 16 : 4);
+                let showPalette = false;
+
+                if (state.mode === 'cpc' || state.mode === '8bp') {
+                    let colors = 16;
+                    if(state.cpcSubMode === 1) colors = 4;
+                    if(state.cpcSubMode === 2) colors = 2;
+                    state.cpcPal = detectCpcPalette(ctxOrig, w, h, colors);
                     activePalette = state.cpcPal;
+                    showPalette = true;
                 } else if (state.mode === 'spec') activePalette = PAL_SPEC;
                 else if (state.mode === 'vga') {
                     state.vgaPal = detectVgaPalette(ctxOrig, w, h, 256);
@@ -160,6 +377,10 @@
                 }
                 else activePalette = PAL_CGA[document.getElementById('selCgaPal').value];
 
+                if(showPalette) renderPalette(state.cpcPal);
+                else document.getElementById('palettePanel').style.display = 'none';
+
+                // --- 3. DITHERING ---
                 const imgData = ctxOrig.getImageData(0,0,w,h);
                 const data = imgData.data;
                 const algo = document.getElementById('selDither').value;
@@ -175,17 +396,68 @@
                         default: applyNearest(data, activePalette); break;
                     }
                 }
-                ctxDest.putImageData(imgData, 0, 0);
+                ctxOrig.putImageData(imgData, 0, 0); 
+
+                // --- 4. CORTAR SPRITES ---
+                let previewW = w, previewH = h;
+
+                if (state.mode === '8bp') {
+                    if (isSheet && !isFull) {
+                        const spW = parseInt(document.getElementById('selSizeX').value);
+                        const spH = parseInt(document.getElementById('selSizeY').value);
+                        const cols = parseInt(document.getElementById('inpCols').value);
+                        const rows = parseInt(document.getElementById('inpRows').value);
+                        let idx = 0;
+                        for (let r = 0; r < rows; r++) {
+                            for (let c = 0; c < cols; c++) {
+                                const sx = c * spW;
+                                const sy = r * spH;
+                                const tilePixels = ctxOrig.getImageData(sx, sy, spW, spH).data;
+                                const suffix = "_" + idx.toString().padStart(2, '0');
+                                state.spritesToInject.push({
+                                    label: state.fileName.toUpperCase() + suffix,
+                                    w: spW, h: spH, pixels: tilePixels
+                                });
+                                idx++;
+                            }
+                        }
+                        previewW = spW; previewH = spH;
+                        document.getElementById('lblRes').innerText = "Preview (Sprite #00)";
+                    } else {
+                        const px = ctxOrig.getImageData(0,0,w,h).data;
+                        state.spritesToInject.push({
+                            label: state.fileName.toUpperCase(),
+                            w: w, h: h, pixels: px
+                        });
+                        document.getElementById('lblRes').innerText = "Resultado Final";
+                    }
+                } else {
+                    document.getElementById('lblRes').innerText = "Resultado Final";
+                }
+
+                // MOSTRAR PREVIEW EN DESTINO
+                cvsDest.width = previewW; cvsDest.height = previewH;
+                cvsDest.className = cssClass;
+                
+                if (state.mode === '8bp' && state.spritesToInject.length > 0) {
+                    const first = state.spritesToInject[0];
+                    const idata = new ImageData(new Uint8ClampedArray(first.pixels), first.w, first.h);
+                    cvsDest.getContext('2d').putImageData(idata, 0, 0);
+                } else {
+                    cvsDest.getContext('2d').putImageData(imgData, 0, 0);
+                }
+
                 updateCodeBlock();
                 document.getElementById('status').innerText = "✅ Listo";
                 document.getElementById('btnDownload').disabled = false;
             }, 10);
         }
 
-        // --- PALETTE DETECTORS ---
+        // --- PALETTE & ENGINES ---
         function detectCpcPalette(ctx, w, h, limit) {
             const d = ctx.getImageData(0,0,w,h).data, hwCounts = {}; 
             for(let i=0; i<d.length; i+=4) {
+                if(d[i+3] < 128) continue; 
                 const r=d[i], g=d[i+1], b=d[i+2];
                 let bestHw=0, minD=Infinity;
                 for(let c of CPC_HW) { const dist = getDistRGB(r, g, b, c.r, c.g, c.b); if(dist < minD) { minD = dist; bestHw = c.hw; } }
@@ -194,312 +466,236 @@
             const sortedHwIds = Object.keys(hwCounts).sort((a,b) => hwCounts[b] - hwCounts[a]).slice(0,limit);
             const pal = sortedHwIds.map((hwId, idx) => { const c = CPC_HW.find(x => x.hw == hwId); return { index: idx, hw: c.hw, r: c.r, g: c.g, b: c.b }; });
             while(pal.length < limit) pal.push({index:pal.length, hw:0, r:0, g:0, b:0});
-            return pal;
+            return pal.sort((a,b)=>a.index-b.index);
         }
-
         function detectVgaPalette(ctx, w, h, limit) {
-            if(document.getElementById('selVgaType').value === 'std') {
-                let p = []; for(let i=0; i<256; i++) p.push({r:i, g:i, b:i}); return p; // Gris como fallback
-            }
+            if(document.getElementById('selVgaType').value === 'std') { let p = []; for(let i=0; i<256; i++) p.push({r:i, g:i, b:i}); return p; }
             const d = ctx.getImageData(0,0,w,h).data, counts = {};
             for(let i=0; i<d.length; i+=4) {
-                const r=d[i]>>3, g=d[i+1]>>3, b=d[i+2]>>3; // Cuantizar para agrupar
-                const key = (r<<10)|(g<<5)|b;
-                counts[key] = (counts[key] || 0) + 1;
+                if(d[i+3] < 128) continue;
+                const k = ((d[i]>>3)<<10)|((d[i+1]>>3)<<5)|(d[i+2]>>3); counts[k] = (counts[k] || 0) + 1;
             }
             const sorted = Object.keys(counts).sort((a,b) => counts[b] - counts[a]).slice(0, limit);
-            return sorted.map((key, idx) => {
-                return { r: (key >> 10) << 3, g: ((key >> 5) & 31) << 3, b: (key & 31) << 3, index: idx };
-            });
+            return sorted.map((key, idx) => { return { r: (key >> 10) << 3, g: ((key >> 5) & 31) << 3, b: (key & 31) << 3, index: idx }; });
         }
-
-        // --- ENGINES ---
         function getClosestIdx(r,g,b, pal) {
             let min = Infinity, idx = 0;
-            for(let i=0; i<pal.length; i++) {
-                const d = getDistRGB(r, g, b, pal[i].r, pal[i].g, pal[i].b);
-                if(d < min) { min = d; idx = i; }
-            }
+            for(let i=0; i<pal.length; i++) { const d = getDistRGB(r, g, b, pal[i].r, pal[i].g, pal[i].b); if(d < min) { min = d; idx = i; } }
             return idx;
         }
-
-        function applyNearest(d, pal) { for(let i=0; i<d.length; i+=4) { const c = pal[getClosestIdx(d[i], d[i+1], d[i+2], pal)]; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; } }
+        function applyNearest(d, pal) { for(let i=0; i<d.length; i+=4) { 
+             if(d[i+3] < 128) { d[i]=pal[0].r; d[i+1]=pal[0].g; d[i+2]=pal[0].b; continue; }
+             const c = pal[getClosestIdx(d[i], d[i+1], d[i+2], pal)]; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; 
+        } }
         function applyMonochrome(d) { for(let i=0; i<d.length; i+=4) { const v = getLuma(d[i],d[i+1],d[i+2]) > 127 ? 255 : 0; d[i]=v; d[i+1]=v; d[i+2]=v; } }
-
         function applySpectrumV11(data, w, h, algo) {
-            // --- CORRECCIÓN: Separar pares por nivel de brillo ---
-            // Solo permitimos pares donde ambos colores sean Normales (0-7)
-            // o ambos colores sean Brillantes (8-15).
-            const normalPairs = [];
-            for(let i=0; i<8; i++) for(let j=i; j<8; j++) normalPairs.push([i,j]);
-
-            const brightPairs = [];
-            for(let i=8; i<16; i++) for(let j=i; j<16; j++) brightPairs.push([i,j]);
-
-            for (let by = 0; by < h; by += 8) {
+             const normalPairs = []; for(let i=0; i<8; i++) for(let j=i; j<8; j++) normalPairs.push([i,j]);
+             const brightPairs = []; for(let i=8; i<16; i++) for(let j=i; j<16; j++) brightPairs.push([i,j]);
+             for (let by = 0; by < h; by += 8) {
                 for (let bx = 0; bx < w; bx += 8) {
-                    // 1. Recopilar los píxeles del bloque 8x8 actual
                     const blockOrig = [];
                     for (let y=0;y<8;y++) for (let x=0;x<8;x++) {
-                        if(bx+x >= w || by+y >= h) continue; // Evitar salir del canvas
-                        const i = ((by+y)*w + (bx+x))*4;
-                        blockOrig.push({r:data[i], g:data[i+1], b:data[i+2], idx:i, x:x, y:y});
+                        if(bx+x >= w || by+y >= h) continue; 
+                        const i = ((by+y)*w + (bx+x))*4; blockOrig.push({r:data[i], g:data[i+1], b:data[i+2], idx:i, x:x, y:y});
                     }
                     if(blockOrig.length === 0) continue;
-
-                    // Función auxiliar para encontrar el mejor par dentro de una lista dada
                     const findBestInList = (pairsList) => {
                         let bestP = pairsList[0], minE = Infinity;
                         for (const pair of pairsList) {
                             const c1 = PAL_SPEC[pair[0]], c2 = PAL_SPEC[pair[1]];
-                            // Color promedio para evaluar contraste
-                            const mixR = (c1.r+c2.r)/2, mixG = (c1.g+c2.g)/2, mixB = (c1.b+c2.b)/2;
                             let currentErr = 0;
                             for(const p of blockOrig) {
-                                const d1 = getDistRGB(p.r, p.g, p.b, c1.r, c1.g, c1.b);
-                                const d2 = getDistRGB(p.r, p.g, p.b, c2.r, c2.g, c2.b);
-                                const dM = getDistRGB(p.r, p.g, p.b, mixR, mixG, mixB);
-                                // Usamos una mezcla ponderada del error a los extremos y al centro
+                                const d1 = getDistRGB(p.r, p.g, p.b, c1.r, c1.g, c1.b), d2 = getDistRGB(p.r, p.g, p.b, c2.r, c2.g, c2.b), dM = getDistRGB(p.r, p.g, p.b, (c1.r+c2.r)/2, (c1.g+c2.g)/2, (c1.b+c2.b)/2);
                                 currentErr += Math.min(d1, d2, dM * 0.6);
                             }
                             if (currentErr < minE) { minE = currentErr; bestP = pair; }
                         }
                         return { pair: bestP, err: minE };
                     };
-
-                    // 2. Buscar el mejor candidato normal y el mejor brillante
-                    const resNormal = findBestInList(normalPairs);
-                    const resBright = findBestInList(brightPairs);
-
-                    // 3. Decidir ganador y establecer el bit de brillo
+                    const resNormal = findBestInList(normalPairs), resBright = findBestInList(brightPairs);
                     let finalPair, isBrightBit;
-                    // Damos una ligerísima preferencia a los colores normales si el error es muy similar
-                    // para evitar una imagen excesivamente brillante.
-                    if (resNormal.err <= resBright.err * 1.05) {
-                         finalPair = resNormal.pair; isBrightBit = 0;
-                    } else {
-                         finalPair = resBright.pair; isBrightBit = 64;
-                    }
-
+                    if (resNormal.err <= resBright.err * 1.05) { finalPair = resNormal.pair; isBrightBit = 0; } else { finalPair = resBright.pair; isBrightBit = 64; }
                     const inkIdx = finalPair[0], paperIdx = finalPair[1];
-
-                    // Guardar el byte de atributo (Flash, Brillo, Papel, Tinta)
                     specAttributes[(by/8)*32 + (bx/8)] = isBrightBit | ((paperIdx % 8) << 3) | (inkIdx % 8);
-
-                    // 4. Aplicar Dithering y dibujar los píxeles finales
                     const ink = PAL_SPEC[inkIdx], paper = PAL_SPEC[paperIdx];
                     for(const p of blockOrig) {
-                        const i = p.idx;
-                        // He reducido ligeramente la fuerza del dither Bayer (de 80 a 65) 
-                        // para que sea un poco más limpio con la nueva paleta.
                         let dv = (algo === 'bayer') ? (BAYER4[p.y%4][p.x%4]/16 - 0.5) * 65 : 0;
-                        const d1 = getDistRGB(p.r+dv, p.g+dv, p.b+dv, ink.r, ink.g, ink.b);
-                        const d2 = getDistRGB(p.r+dv, p.g+dv, p.b+dv, paper.r, paper.g, paper.b);
+                        const d1 = getDistRGB(p.r+dv, p.g+dv, p.b+dv, ink.r, ink.g, ink.b), d2 = getDistRGB(p.r+dv, p.g+dv, p.b+dv, paper.r, paper.g, paper.b);
                         const finalC = (d1 < d2) ? ink : paper;
-                        data[i] = finalC.r; data[i+1] = finalC.g; data[i+2] = finalC.b;
+                        data[p.idx] = finalC.r; data[p.idx+1] = finalC.g; data[p.idx+2] = finalC.b;
                     }
                 }
             }
         }
-
-        // --- DITHERING ---
         function addErr(d, i, er, eg, eb, f) { d[i] = clamp(d[i] + er*f); d[i+1] = clamp(d[i+1] + eg*f); d[i+2] = clamp(d[i+2] + eb*f); }
-        function applyFloydSteinberg(d, pal, w, h) {
-            for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
-                const i = (y*w+x)*4, c = pal[getClosestIdx(d[i],d[i+1],d[i+2], pal)];
-                const er=d[i]-c.r, eg=d[i+1]-c.g, eb=d[i+2]-c.b;
-                d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b;
-                if(x+1<w) addErr(d, (y*w+x+1)*4, er,eg,eb, 7/16);
-                if(x>0 && y+1<h) addErr(d, ((y+1)*w+x-1)*4, er,eg,eb, 3/16);
-                if(y+1<h) addErr(d, ((y+1)*w+x)*4, er,eg,eb, 5/16);
-                if(x+1<w && y+1<h) addErr(d, ((y+1)*w+x+1)*4, er,eg,eb, 1/16);
-            }
-        }
-        function applyBayer(d, pal, w, h) {
-            for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
-                const i = (y*w+x)*4, t = (BAYER4[y%4][x%4]/16)-0.5, f=40;
-                const c = pal[getClosestIdx(clamp(d[i]+t*f), clamp(d[i+1]+t*f), clamp(d[i+2]+t*f), pal)];
-                d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b;
-            }
-        }
-        function applyJJN(d, pal, w, h) {
-             const m = [{dx:1, dy:0, f:7}, {dx:2, dy:0, f:5}, {dx:-2, dy:1, f:3}, {dx:-1, dy:1, f:5}, {dx:0, dy:1, f:7}, {dx:1, dy:1, f:5}, {dx:2, dy:1, f:3}, {dx:-2, dy:2, f:1}, {dx:-1, dy:2, f:3}, {dx:0, dy:2, f:5}, {dx:1, dy:2, f:3}, {dx:2, dy:2, f:1}];
-             for(let y=0; y<h; y++) for(let x=0; x<w; x++) {
-                const i=(y*w+x)*4, c=pal[getClosestIdx(d[i],d[i+1],d[i+2],pal)];
-                const er=d[i]-c.r, eg=d[i+1]-c.g, eb=d[i+2]-c.b;
-                d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b;
-                for(let k of m) { const nx=x+k.dx, ny=y+k.dy; if(nx>=0 && nx<w && ny<h) addErr(d, (ny*w+nx)*4, er,eg,eb, k.f/48); }
-             }
-        }
+        function applyFloydSteinberg(d, pal, w, h) { for(let y=0; y<h; y++) for(let x=0; x<w; x++) { const i = (y*w+x)*4, c = pal[getClosestIdx(d[i],d[i+1],d[i+2], pal)]; const er=d[i]-c.r, eg=d[i+1]-c.g, eb=d[i+2]-c.b; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; if(x+1<w) addErr(d, (y*w+x+1)*4, er,eg,eb, 7/16); if(x>0 && y+1<h) addErr(d, ((y+1)*w+x-1)*4, er,eg,eb, 3/16); if(y+1<h) addErr(d, ((y+1)*w+x)*4, er,eg,eb, 5/16); if(x+1<w && y+1<h) addErr(d, ((y+1)*w+x+1)*4, er,eg,eb, 1/16); } }
+        function applyBayer(d, pal, w, h) { for(let y=0; y<h; y++) for(let x=0; x<w; x++) { const i = (y*w+x)*4, t = (BAYER4[y%4][x%4]/16)-0.5, f=40, c = pal[getClosestIdx(clamp(d[i]+t*f), clamp(d[i+1]+t*f), clamp(d[i+2]+t*f), pal)]; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; } }
+        function applyJJN(d, pal, w, h) { const m = [{dx:1, dy:0, f:7}, {dx:2, dy:0, f:5}, {dx:-2, dy:1, f:3}, {dx:-1, dy:1, f:5}, {dx:0, dy:1, f:7}, {dx:1, dy:1, f:5}, {dx:2, dy:1, f:3}, {dx:-2, dy:2, f:1}, {dx:-1, dy:2, f:3}, {dx:0, dy:2, f:5}, {dx:1, dy:2, f:3}, {dx:2, dy:2, f:1}]; for(let y=0; y<h; y++) for(let x=0; x<w; x++) { const i=(y*w+x)*4, c=pal[getClosestIdx(d[i],d[i+1],d[i+2],pal)], er=d[i]-c.r, eg=d[i+1]-c.g, eb=d[i+2]-c.b; d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b; for(let k of m) { const nx=x+k.dx, ny=y+k.dy; if(nx>=0 && nx<w && ny<h) addErr(d, (ny*w+nx)*4, er,eg,eb, k.f/48); } } }
 
-        // --- EXPORTERS ---
         function download() {
             if(!state.img) return;
             const px = ctxDest.getImageData(0,0,cvsDest.width, cvsDest.height).data;
-            let blob, ext;
-            if (state.mode === 'cpc') { blob = new Blob([genCpcBin(px)], {type: 'application/octet-stream'}); ext = '.BIN'; }
+            let blob, ext, fname = state.fileName;
+            
+            if (state.mode === '8bp') {
+                if (!state.asmContent) { alert("¡Por favor, carga primero el archivo .ASM!"); return; }
+                if (state.asmContent.indexOf("_BEGIN_IMAGES") === -1 || state.asmContent.indexOf("_END_IMAGES") === -1) {
+                     alert("❌ ERROR CRÍTICO:\n\nEl archivo ASM cargado en memoria parece inválido o corrupto (faltan marcadores).\n\nCarga de nuevo el archivo images.asm correcto.");
+                     return;
+                }
+                const resultAsm = injectMultipleSprites(state.spritesToInject);
+                blob = new Blob([resultAsm], {type: 'text/plain'});
+                ext = '.asm';
+                const inputAsm = document.getElementById('asmInput').files[0];
+                fname = inputAsm ? inputAsm.name.split('.')[0] : "project";
+            }
+            else if (state.mode === 'cpc') { blob = new Blob([genCpcBin(px)], {type: 'application/octet-stream'}); ext = '.BIN'; }
             else if (state.mode === 'spec') { blob = new Blob([genSpecScr(px)], {type: 'application/octet-stream'}); ext = '.SCR'; }
             else if (state.mode === 'vga') { blob = new Blob([genVgaBin(px)], {type: 'application/octet-stream'}); ext = '.VGA'; }
             else { blob = new Blob([genCgaBsave(px)], {type: 'application/octet-stream'}); ext = '.BSV'; }
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = state.fileName + ext; a.click();
+            
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fname + ext; a.click();
         }
 
-        function genVgaBin(px) {
-            const buf = new Uint8Array(64000 + 768);
-            for(let i=0; i<64000; i++) buf[i] = getClosestIdx(px[i*4], px[i*4+1], px[i*4+2], state.vgaPal);
-            for(let i=0; i<256; i++) {
-                if(state.vgaPal[i]) {
-                    buf[64000 + i*3] = state.vgaPal[i].r >> 2;
-                    buf[64000 + i*3+1] = state.vgaPal[i].g >> 2;
-                    buf[64000 + i*3+2] = state.vgaPal[i].b >> 2;
+        // --- 8BP BULK INJECTION ---
+        function injectMultipleSprites(sprites) {
+            let asm = state.asmContent;
+            
+            // 1. DETERMINAR ID INICIAL GLOBAL
+            const listStart = "IMAGE_LIST";
+            const listEnd = "_BEGIN_ALPHABET";
+            const lS = asm.indexOf(listStart);
+            const lE = asm.indexOf(listEnd);
+            let nextId = 16; 
+
+            if (lS !== -1 && lE !== -1) {
+                const listBlock = asm.substring(lS, lE);
+                const idMatches = [...listBlock.matchAll(/;\s*(\d+)/g)];
+                if (idMatches.length > 0) {
+                    const ids = idMatches.map(m => parseInt(m[1], 10));
+                    nextId = Math.max(...ids) + 1;
                 }
             }
-            return buf;
+
+            sprites.forEach(sprite => {
+                let currentId = nextId;
+                const existingIdMatch = asm.match(new RegExp(`dw\\s+${sprite.label}\\s*;\\s*(\\d+)`, 'i'));
+                if (existingIdMatch) {
+                    currentId = parseInt(existingIdMatch[1], 10);
+                } else {
+                    nextId++;
+                }
+                asm = injectOneSprite(asm, sprite, currentId);
+            });
+            asm = asm.replace(/(\r\n|\n|\r)+_END_IMAGES/g, "\n_END_IMAGES");
+            return asm;
         }
 
-        function genCpcBin(px) {
-            const buf = new Uint8Array(16384), isM1 = (state.cpcSubMode === 1);
-            for(let y=0; y<200; y++) {
-                const lineAddr = ((y >> 3) * 80) + ((y & 7) * 2048);
-                for(let xByte=0; xByte<80; xByte++) {
+        function injectOneSprite(currentAsm, sprite, idToUse) {
+            const widthBytes = Math.ceil(sprite.w / (state.cpcSubMode === 0 ? 2 : (state.cpcSubMode === 1 ? 4 : 8)));
+            let hexData = `\tDB ${widthBytes}, ${sprite.h} ; Header (W, H)\n`;
+            const px = sprite.pixels;
+            for(let y=0; y<sprite.h; y++) {
+                hexData += "\tDB ";
+                let rowBytes = [];
+                for(let x=0; x<sprite.w; ) {
                     let byte = 0;
-                    if (!isM1) { 
-                        const c1 = getClosestIdx(px[(y*160+xByte*2)*4], px[(y*160+xByte*2)*4+1], px[(y*160+xByte*2)*4+2], state.cpcPal);
-                        const c2 = getClosestIdx(px[(y*160+xByte*2+1)*4], px[(y*160+xByte*2+1)*4+1], px[(y*160+xByte*2+1)*4+2], state.cpcPal);
-                        if(c1&1) byte|=128; if(c1&2) byte|=8; if(c1&4) byte|=32; if(c1&8) byte|=2;
-                        if(c2&1) byte|=64;  if(c2&2) byte|=4; if(c2&4) byte|=16; if(c2&8) byte|=1;
+                    if(state.cpcSubMode === 0) { 
+                        const c1=getClosestIdx(px[(y*sprite.w+x)*4],px[(y*sprite.w+x)*4+1],px[(y*sprite.w+x)*4+2],state.cpcPal), c2=getClosestIdx(px[(y*sprite.w+x+1)*4],px[(y*sprite.w+x+1)*4+1],px[(y*sprite.w+x+1)*4+2],state.cpcPal);
+                        byte = packMode0(c1, c2); x+=2;
+                    } else if (state.cpcSubMode === 1) { 
+                        let p=[]; for(let k=0;k<4;k++) p.push(getClosestIdx(px[(y*sprite.w+x+k)*4], px[(y*sprite.w+x+k)*4+1], px[(y*sprite.w+x+k)*4+2], state.cpcPal));
+                        byte = packMode1(p[0],p[1],p[2],p[3]); x+=4;
                     } else { 
-                        for(let p=0; p<4; p++) {
-                            const c = getClosestIdx(px[(y*320+xByte*4+p)*4], px[(y*320+xByte*4+p)*4+1], px[(y*320+xByte*4+p)*4+2], state.cpcPal);
-                            if(c & 2) byte |= (1 << (7-p)); if(c & 1) byte |= (1 << (3-p));
-                        }
+                        for(let k=0;k<8;k++) { if(getClosestIdx(px[(y*sprite.w+x+k)*4], px[(y*sprite.w+x+k)*4+1], px[(y*sprite.w+x+k)*4+2], state.cpcPal) > 0) byte |= (1<<(7-k)); } x+=8;
                     }
-                    buf[lineAddr + xByte] = byte;
+                    rowBytes.push("&" + byte.toString(16).toUpperCase().padStart(2,'0'));
+                }
+                hexData += rowBytes.join(", ") + "\n";
+            }
+
+            const imgStart = "_BEGIN_IMAGES";
+            const imgEnd = "_END_IMAGES";
+            const iS = currentAsm.indexOf(imgStart), iE = currentAsm.indexOf(imgEnd);
+            let pre = currentAsm.substring(0, iS + imgStart.length);
+            let post = currentAsm.substring(iE);
+            let block = currentAsm.substring(iS + imgStart.length, iE);
+            
+            const label = sprite.label;
+            const labelRegex = new RegExp(`(^|\\r|\\n)\\s*${label}\\s*(:|;|\\r|\\n|$)`, 'm');
+            const match = block.match(labelRegex);
+
+            if (match) {
+                const startIdx = match.index + match[1].length; 
+                const sub = block.substring(startIdx);
+                const lines = sub.split('\n');
+                let lenToRemove = lines[0].length + 1; 
+                for(let i=1; i<lines.length; i++) {
+                    if (lines[i].trim().toUpperCase().match(/^[A-Z0-9_]+(\s+|:|;|$)/)) break;
+                    lenToRemove += lines[i].length + 1;
+                }
+                block = block.substring(0, startIdx) + `${label} ; ${idToUse}\n${hexData}` + block.substring(startIdx + lenToRemove);
+            } else {
+                const lines = block.split('\n');
+                let insertIdx = lines.length;
+                while(insertIdx > 0) {
+                    const l = lines[insertIdx-1].trim();
+                    if(l === '' || l.startsWith(';')) insertIdx--; else break;
+                }
+                lines.splice(insertIdx, 0, `\n${label} ; ${idToUse}\n${hexData}`);
+                block = lines.join('\n');
+            }
+            currentAsm = pre + block + post;
+
+            const listStart = "IMAGE_LIST";
+            const listEnd = "_BEGIN_ALPHABET";
+            const lS = currentAsm.indexOf(listStart);
+            const lE = currentAsm.indexOf(listEnd);
+
+            if (lS !== -1 && lE !== -1) {
+                const listBlock = currentAsm.substring(lS, lE);
+                if (!new RegExp(`\\bdw\\s+${label}\\b`, 'i').test(listBlock)) {
+                    const preList = currentAsm.substring(0, lS);
+                    const postList = currentAsm.substring(lE);
+                    const dwMatches = [...listBlock.matchAll(/^\s*dw\s+.*$/gim)];
+                    let newBlock = "";
+                    if (dwMatches.length > 0) {
+                        const lastDw = dwMatches[dwMatches.length - 1];
+                        const insertPos = lastDw.index + lastDw[0].length;
+                        newBlock = listBlock.substring(0, insertPos) + `\ndw ${label} ;${idToUse}` + listBlock.substring(insertPos);
+                    } else {
+                        newBlock = listBlock + `\ndw ${label} ;${idToUse}\n`;
+                    }
+                    currentAsm = preList + newBlock + postList;
                 }
             }
-            return buf;
+            return currentAsm;
         }
 
-        function genSpecScr(px) {
-            const buf = new Uint8Array(6912);
-            for (let by=0; by<24; by++) {
-                for (let bx=0; bx<32; bx++) {
-                    const attr = specAttributes[by*32 + bx];
-                    buf[6144 + by*32 + bx] = attr;
-                    const cInk = PAL_SPEC[(attr & 7) + ((attr & 64) ? 8 : 0)];
-                    const cPaper = PAL_SPEC[((attr >> 3) & 7) + ((attr & 64) ? 8 : 0)];
-                    for(let y=0;y<8;y++) {
-                        const addr = (((by*8+y)>>6)<<11) + (((by*8+y)&7)<<8) + (((by*8+y)>>3&7)<<5);
-                        let byte=0;
-                        for(let x=0;x<8;x++) {
-                            const i=((by*8+y)*256+(bx*8+x))*4;
-                            if(getDistRGB(px[i],px[i+1],px[i+2], cInk.r,cInk.g,cInk.b) < getDistRGB(px[i],px[i+1],px[i+2], cPaper.r,cPaper.g,cPaper.b)) byte |= (1<<(7-x));
-                        }
-                        buf[addr+bx] = byte;
-                    }
-                }
-            }
-            return buf;
-        }
+        function packMode0(c1, c2) { let b=0; if(c1&1)b|=2; if(c1&2)b|=8; if(c1&4)b|=32; if(c1&8)b|=128; if(c2&1)b|=1; if(c2&2)b|=4; if(c2&4)b|=16; if(c2&8)b|=64; return b; }
+        function packMode1(c1, c2, c3, c4) { let b=0; if(c1&2)b|=128; if(c1&1)b|=8; if(c2&2)b|=64; if(c2&1)b|=4; if(c3&2)b|=32; if(c3&1)b|=2; if(c4&2)b|=16; if(c4&1)b|=1; return b; }
 
-        function genCgaBsave(px) {
-            const buf = new Uint8Array(16391); buf[0]=0xFD; buf.set([0,0,0,184,0,64],1);
-            const pal = PAL_CGA[document.getElementById('selCgaPal').value];
-            for(let y=0; y<200; y++) {
-                const off = 7 + (y%2?0x2000:0) + (Math.floor(y/2)*80);
-                for(let x=0; x<80; x++) {
-                    let b = 0;
-                    for(let p=0; p<4; p++) b |= (getClosestIdx(px[(y*320+x*4+p)*4],px[(y*320+x*4+p)*4+1],px[(y*320+x*4+p)*4+2], pal) << (6-p*2));
-                    buf[off+x] = b;
-                }
-            }
-            return buf;
-        }
+        function genCpcBin(px) { const buf=new Uint8Array(16384); for(let y=0;y<200;y++){ const la=((y>>3)*80)+((y&7)*2048); for(let x=0;x<80;x++){ let b=0; if(state.cpcSubMode===0){ b=packMode0(getClosestIdx(px[(y*160+x*2)*4],px[(y*160+x*2)*4+1],px[(y*160+x*2)*4+2],state.cpcPal), getClosestIdx(px[(y*160+x*2+1)*4],px[(y*160+x*2+1)*4+1],px[(y*160+x*2+1)*4+2],state.cpcPal)); } else if(state.cpcSubMode===1){ let p=[]; for(let k=0;k<4;k++) p.push(getClosestIdx(px[(y*320+x*4+k)*4],px[(y*320+x*4+k)*4+1],px[(y*320+x*4+k)*4+2],state.cpcPal)); b=packMode1(p[0],p[1],p[2],p[3]); } buf[la+x]=b; } } return buf; }
+        function genSpecScr(px) { const buf=new Uint8Array(6912); for(let by=0;by<24;by++) for(let bx=0;bx<32;bx++){ const at=specAttributes[by*32+bx]; buf[6144+by*32+bx]=at; const ci=PAL_SPEC[(at&7)+((at&64)?8:0)], cp=PAL_SPEC[((at>>3)&7)+((at&64)?8:0)]; for(let y=0;y<8;y++){ const ad=(((by*8+y)>>6)<<11)+(((by*8+y)&7)<<8)+(((by*8+y)>>3&7)<<5); let b=0; for(let x=0;x<8;x++){ const i=((by*8+y)*256+(bx*8+x))*4; if(getDistRGB(px[i],px[i+1],px[i+2],ci.r,ci.g,ci.b)<getDistRGB(px[i],px[i+1],px[i+2],cp.r,cp.g,cp.b)) b|=(1<<(7-x)); } buf[ad+bx]=b; } } return buf; }
+        function genVgaBin(px) { const buf=new Uint8Array(64000+768); for(let i=0;i<64000;i++) buf[i]=getClosestIdx(px[i*4],px[i*4+1],px[i*4+2],state.vgaPal); for(let i=0;i<256;i++) if(state.vgaPal[i]){ buf[64000+i*3]=state.vgaPal[i].r>>2; buf[64000+i*3+1]=state.vgaPal[i].g>>2; buf[64000+i*3+2]=state.vgaPal[i].b>>2; } return buf; }
+        function genCgaBsave(px) { const buf=new Uint8Array(16391); buf[0]=0xFD; buf.set([0,0,0,184,0,64],1); const pal=PAL_CGA[document.getElementById('selCgaPal').value]; for(let y=0;y<200;y++){ const off=7+(y%2?0x2000:0)+(Math.floor(y/2)*80); for(let x=0;x<80;x++){ let b=0; for(let p=0;p<4;p++) b|=(getClosestIdx(px[(y*320+x*4+p)*4],px[(y*320+x*4+p)*4+1],px[(y*320+x*4+p)*4+2],pal)<<(6-p*2)); buf[off+x]=b; } } return buf; }
 
         function updateCodeBlock() {
-            const t=document.getElementById('codeTitle'), o=document.getElementById('codeOutput'), f=state.fileName.toUpperCase();
-            if (state.mode === 'cpc') {
-                t.innerText = "AMSTRAD CPC LOADER:"; o.innerText = `10 MODE ${state.cpcSubMode}\n20 MEMORY &3FFF: LOAD "${f}.BIN",&C000\n30 CALL &C000: GOTO 30`;
-            } else if (state.mode === 'spec') {
-                t.innerText = "ZX SPECTRUM LOADER:"; o.innerText = `10 CLEAR 24999: LOAD "" SCREEN$\n20 PAUSE 0`;
-            } else if (state.mode === 'vga') {
-                // *** BLOQUE POWERBASIC ACTUALIZADO ***
-                t.innerText = "POWERBASIC (VGA M13H):"; 
-                o.innerText = `' =================================================            
-' CARGADOR VGA OPTIMIZADO - SINTAXIS REG CORREGIDA
-' =================================================            
-$CPU 8086
-$FLOAT EMULATE
-
-DEFINT A-Z
-
-' --- Configuración inicial ---
-CLS
-f$ = "vga.bin"
-
-IF LEN(DIR$(f$)) = 0 THEN
-    PRINT "Error: El archivo '" + f$ + "' no existe."
-    END
-END IF
-
-' --- Activar Modo 13h (320x200 256 colores) ---
-' Sintaxis PB 3.5: REG 1 es AX.
-' Cargamos &H0013 en AX (AH=00, AL=13)
-REG 1, &H0013
-CALL INTERRUPT &H10
-
-' --- Cargar Datos (Rutina Rápida) ---
-LoadVGAFast f$
-
-' --- Esperar tecla ---
-WHILE INKEY$ = "": WEND
-
-' --- Volver a modo texto (Modo 3 estándar) ---
-' Cargamos &H0003 en AX
-REG 1, &H0003
-CALL INTERRUPT &H10
-END
-
-' =================================================            
-SUB LoadVGAFast(FileName$)
-    DIM f AS INTEGER
-    DIM buffer AS STRING
-    DIM palBuffer AS STRING
-    
-    f = FREEFILE
-    OPEN FileName$ FOR BINARY AS #f    
-    
-    ' --- PARTE 1: PIXELES ---
-    DEF SEG = &HA000
-    
-    ' Buffer de 32000 bytes para evitar overflow de integer
-    buffer = SPACE$(32000)
-    
-    ' Mitad superior
-    GET$ #f, 32000, buffer   
-    POKE$ 0, buffer          
-    
-    ' Mitad inferior
-    GET$ #f, 32000, buffer
-    POKE$ 32000, buffer      
-    
-    ' --- PARTE 2: PALETA ---
-    palBuffer = SPACE$(768)
-    GET$ #f, 768, palBuffer
-    
-    ' Puerto 3C8h: Indice de color (empezamos en 0)
-    OUT &H3C8, 0
-    FOR i = 1 TO 768
-        ' Puerto 3C9h: Datos RGB
-        OUT &H3C9, ASC(palBuffer, i)
-    NEXT i
-    
-    CLOSE #f
-    DEF SEG
-END SUB`;
-            } else {
-                t.innerText = "GW-BASIC (CGA):"; o.innerText = `10 SCREEN 1: COLOR 0,0: DEF SEG=&HB800\n20 BLOAD "${f}.BSV", 0\n30 IF INKEY$="" THEN 30`;
+            const t=document.getElementById('codeTitle'), o=document.getElementById('codeOutput'), f=state.fileName;
+            
+            if (state.mode === '8bp') { 
+                t.innerText = "8BP ASM INJECTION:"; 
+                o.innerText = state.asmContent 
+                    ? `Archivo ASM cargado. Listo para inyectar sprite "${f}" y registrar en IMAGE_LIST...\n${getPaletteText()}` 
+                    : "Por favor, carga el archivo .ASM para realizar la inyección."; 
             }
+            else if (state.mode === 'cpc') { 
+                t.innerText = "AMSTRAD CPC BASIC:"; 
+                o.innerText = `10 MODE ${state.cpcSubMode}\n20 MEMORY &3FFF: LOAD "${f.toUpperCase()}.BIN",&C000\n30 CALL &C000: GOTO 30\n${getPaletteText()}`; 
+            }
+            else if (state.mode === 'spec') { t.innerText = "ZX SPECTRUM BASIC:"; o.innerText = `10 CLEAR 24999: LOAD "" SCREEN$\n20 PAUSE 0`; }
+            else if (state.mode === 'vga') { t.innerText = "VGA INFO:"; o.innerText = `Archivo VGA (320x200) + Paleta 256 colores al final.`; }
+            else { t.innerText = "GW-BASIC (CGA):"; o.innerText = `10 SCREEN 1: COLOR 0,0: DEF SEG=&HB800\n20 BLOAD "${f.toUpperCase()}.BSV", 0`; }
         }
 
         init();
