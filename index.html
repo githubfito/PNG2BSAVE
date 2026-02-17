@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Retro Graphics Converter (PNG Mode Fixed)</title>
+    <title>Retro Graphics Converter (Zoom Fixed)</title>
     <style>
         body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; position: relative; }
         .main-container { background: #333; padding: 20px; border: 2px solid #555; border-radius: 8px; text-align: center; width: 95%; max-width: 950px; margin-top: 20px; }
@@ -30,7 +30,13 @@
 
         .canvas-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
         .canvas-box { display: flex; flex-direction: column; align-items: center; }
+        
+        /* CANVAS GENERAL (Para el original) */
         canvas { border: 2px solid #fff; background: #000; image-rendering: pixelated; width: auto; height: auto; max-width: 100%; }
+        
+        /* FIX: El canvas de destino NO debe tener max-width para permitir el zoom horizontal */
+        #cvsDest { max-width: none; }
+
         .aspect-cpc-m0, .aspect-cpc-m1, .aspect-cga, .aspect-vga { width: 640px; height: 400px; }
         .aspect-spec { width: 512px; height: 384px; }
         .label-tag { background: #000; color: #fff; padding: 2px 8px; font-size: 0.8em; margin-bottom: 5px; border-radius: 3px; }
@@ -44,6 +50,14 @@
         .size-selector-group label { color: #f0f; font-size: 0.8em; font-weight: bold; text-transform: uppercase; }
         .divider { width: 1px; height: 30px; background: #aa00aa; margin: 0 10px; }
         .sheet-info { margin-top: 5px; font-size: 0.8em; color: #aaa; width: 100%; text-align: center; }
+
+        /* Controles de Zoom */
+        .zoom-controls { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; background: #222; padding: 4px 10px; border-radius: 10px; border: 1px solid #555; }
+        .zoom-btn { background: #444; color: #fff; border: 1px solid #777; width: 25px; height: 25px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-weight: bold; cursor: pointer; padding: 0; font-size: 1.2em; line-height: 1; }
+        .zoom-btn:hover { background: #aa00aa; border-color: #f0f; }
+        .zoom-val { font-size: 0.8em; color: #f0f; width: 30px; text-align: center; }
+        .aspect-check { font-size: 0.75em; display: flex; align-items: center; gap: 3px; margin-left: 10px; color: #ccc; cursor: pointer; }
+        .aspect-check input { cursor: pointer; }
 
         .palette-display { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-top: 10px; padding: 10px; background: #111; border: 1px solid #444; border-radius: 4px; }
         .pal-swatch { display: flex; flex-direction: column; align-items: center; background: #222; border: 1px solid #555; padding: 3px; border-radius: 3px; min-width: 60px; }
@@ -176,10 +190,27 @@
             <div id="status">Esperando imagen...</div>
         </div>
         <div class="canvas-container">
-            <div class="canvas-box"><span class="label-tag">Imagen Original (True Color)</span><canvas id="cvsOrig"></canvas></div>
-            <div class="canvas-box"><span class="label-tag" id="lblRes">Preview Procesada</span><canvas id="cvsDest"></canvas></div>
+            <div class="canvas-box">
+                <span class="label-tag">Imagen Original (True Color)</span>
+                <canvas id="cvsOrig"></canvas>
+            </div>
+            <div class="canvas-box">
+                <span class="label-tag" id="lblRes">Preview Procesada</span>
+                <div class="zoom-controls">
+                    <button id="btnZoomOut" class="zoom-btn">-</button>
+                    <span id="lblZoom" class="zoom-val">x1</span>
+                    <button id="btnZoomIn" class="zoom-btn">+</button>
+                    <label class="aspect-check">
+                        <input type="checkbox" id="chkAspect">
+                        Simular Aspecto TV
+                    </label>
+                </div>
+                <div style="overflow:auto; max-width: 100%; display: flex; justify-content: center; align-items:flex-start;">
+                    <canvas id="cvsDest"></canvas>
+                </div>
+            </div>
         </div>
-        <div class="code-block"><strong id="codeTitle">Loader Code:</strong><pre id="codeOutput">...</pre></div>
+        <div class="code-block"><strong id="codeTitle">Data / Code:</strong><pre id="codeOutput">...</pre></div>
     </div>
 
     <script>
@@ -209,7 +240,7 @@
         const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
 
         let specAttributes = new Uint8Array(768); 
-        let state = { mode: '8bp', cpcSubMode: 0, img: null, fileName: 'image', asmContent: null, cpcPal: [], vgaPal: [], spritesToInject: [], uniqueColors: 0 };
+        let state = { mode: '8bp', cpcSubMode: 0, img: null, fileName: 'image', asmContent: null, cpcPal: [], vgaPal: [], spritesToInject: [], uniqueColors: 0, previewZoom: 1 };
         
         const cvsOrig = document.getElementById('cvsOrig'), cvsDest = document.getElementById('cvsDest');
         const ctxOrig = cvsOrig.getContext('2d'), ctxDest = cvsDest.getContext('2d', { willReadFrequently: true });
@@ -244,9 +275,48 @@
                 }; r.readAsText(f);
             });
 
+            document.getElementById('chkCustomSize').addEventListener('change', (e) => {
+                const disabled = !e.target.checked;
+                document.getElementById('inpFinalW').disabled = disabled;
+                document.getElementById('inpFinalH').disabled = disabled;
+            });
+
+            // ZOOM Listeners
+            document.getElementById('btnZoomIn').addEventListener('click', () => changeZoom(1));
+            document.getElementById('btnZoomOut').addEventListener('click', () => changeZoom(-1));
+            // Aspect Ratio Listener
+            document.getElementById('chkAspect').addEventListener('change', updatePreviewZoom);
+
             ['selDither', 'selCgaPal', 'chkMono', 'selCpcMode', 'selVgaType', 'selSizeX', 'selSizeY', 'inpCols', 'inpRows', 'inpTargetColors', 'inpFinalW', 'inpFinalH', 'chkResize', 'chkCustomSize', 'chkSpriteSheet'].forEach(id => document.getElementById(id).addEventListener('change', process));
             document.getElementById('btnDownload').addEventListener('click', download);
             updateUI('8bp');
+        }
+
+        function changeZoom(d) {
+            state.previewZoom += d;
+            if(state.previewZoom < 1) state.previewZoom = 1;
+            document.getElementById('lblZoom').innerText = "x" + state.previewZoom;
+            updatePreviewZoom();
+        }
+
+        function updatePreviewZoom() {
+            // Factor base de zoom
+            let z = state.previewZoom;
+            let aspect = 1;
+
+            // Si está activada la simulación de aspecto TV
+            if(document.getElementById('chkAspect').checked) {
+                if(state.mode === 'cpc' || state.mode === '8bp') {
+                    // Modo 0 (y 8BP normal): píxeles el doble de anchos
+                    if(state.cpcSubMode === 0) aspect = 2;
+                    // Modo 2: píxeles la mitad de anchos (o x1 ancho x2 alto, visualmente 0.5 ratio)
+                    else if(state.cpcSubMode === 2) aspect = 0.5;
+                }
+            }
+
+            // Aplicar tamaño visual CSS
+            cvsDest.style.width = (cvsDest.width * z * aspect) + "px";
+            cvsDest.style.height = (cvsDest.height * z) + "px";
         }
 
         function extractRegion(sourceData, sourceW, x, y, w, h) {
@@ -352,6 +422,10 @@
 
                 cvsDest.width = w; cvsDest.height = h;
                 ctxDest.putImageData(new ImageData(new Uint8ClampedArray(procData), w, h), 0, 0);
+                
+                // Aplicar Zoom Visual (CSS)
+                updatePreviewZoom();
+
                 document.getElementById('status').innerText = "✅ Listo";
                 document.getElementById('btnDownload').disabled = false;
                 updateCodeBlock();
@@ -485,7 +559,8 @@
             let blob, ext = ".BIN";
             if (state.mode === '8bp') {
                 if(!state.asmContent) { alert("Carga el ASM primero"); return; }
-                blob = new Blob([injectOneSprite(state.asmContent, {label:state.fileName.toUpperCase(), w:cvsDest.width, h:cvsDest.height, pixels:px}, 16)], {type:'text/plain'}); ext=".asm";
+                const resultAsm = injectOneSprite(state.asmContent, {label:state.fileName.toUpperCase(), w:cvsDest.width, h:cvsDest.height, pixels:px});
+                blob = new Blob([resultAsm], {type:'text/plain'}); ext=".asm";
             }
             else if (state.mode === 'spec') { blob = new Blob([genSpecScr(px)], {type:'application/octet-stream'}); ext=".SCR"; }
             else if (state.mode === 'cpc') { blob = new Blob([genCpcBin(px)], {type:'application/octet-stream'}); ext=".BIN"; }
@@ -495,10 +570,26 @@
             const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = state.fileName + ext; a.click();
         }
 
-        function injectOneSprite(asm, sprite, id) {
+        function injectOneSprite(asm, sprite) {
+            let lastId = 15; 
+            let insertHeaderIdx = asm.indexOf("IMAGE_LIST");
+            if(insertHeaderIdx === -1) return asm; 
+
+            const regexDW = /dw\s+([a-zA-Z0-9_]+)\s*;\s*(\d+)/gi;
+            let match;
+            while ((match = regexDW.exec(asm)) !== null) {
+                const currentId = parseInt(match[2]);
+                if (currentId > lastId) lastId = currentId;
+                insertHeaderIdx = regexDW.lastIndex; 
+            }
+            const nextId = lastId + 1;
+
             const sub = parseInt(document.getElementById('selCpcMode').value);
             const wBytes = Math.ceil(sprite.w / (sub === 0 ? 2 : 4));
-            let hex = `\tDB ${wBytes}, ${sprite.h}\n`;
+            
+            let hex = `\n;------ SPRITE IMPORTADO: ${sprite.label} ------\n${sprite.label} ; ${nextId}\n`;
+            hex += `\tDB ${wBytes}, ${sprite.h}\n`;
+            
             for(let y=0; y<sprite.h; y++) {
                 hex += "\tDB "; let r=[];
                 for(let x=0; x<sprite.w; ) {
@@ -518,15 +609,58 @@
                 }
                 hex += r.join(", ") + "\n";
             }
-            const iS = asm.indexOf("_BEGIN_IMAGES"), iE = asm.indexOf("_END_IMAGES");
-            return asm.substring(0, iS+13) + `\n${sprite.label} ; ${id}\n${hex}` + asm.substring(iE);
+
+            let newAsm = asm.slice(0, insertHeaderIdx) + `\ndw ${sprite.label}; ${nextId}` + asm.slice(insertHeaderIdx);
+            const iE = newAsm.indexOf("_END_IMAGES"); 
+            if (iE === -1) { alert("No se encontró _END_IMAGES"); return asm; }
+            return newAsm.slice(0, iE) + hex + "\n" + newAsm.slice(iE);
         }
 
         function updateCodeBlock() {
             const o = document.getElementById('codeOutput');
-            if(state.mode==='cpc') o.innerText = `10 MODE ${state.cpcSubMode}\n20 MEMORY &3FFF: LOAD "${state.fileName.toUpperCase()}.BIN",&C000\n30 CALL &C000`;
-            else if(state.mode==='spec') o.innerText = `10 LOAD "" SCREEN$`;
-            else o.innerText = "...";
+            
+            if (state.mode === '8bp') {
+                let limit = 0;
+                if (state.cpcSubMode === 0) limit = 16;
+                else if (state.cpcSubMode === 1) limit = 4;
+                else limit = 2;
+
+                let code = "; PALETA DETECTADA (Hardware Values)\n";
+                code += "MY_PALETTE:\n";
+                code += "\tDB ";
+                
+                let bytes = [];
+                for(let i=0; i<limit; i++) {
+                    let hw = (state.cpcPal[i]) ? state.cpcPal[i].hw : 0;
+                    bytes.push("&" + hw.toString(16).toUpperCase().padStart(2,'0'));
+                }
+                code += bytes.join(", ") + "\n";
+                o.innerText = code;
+            }
+            else if (state.mode === 'cpc') {
+                let limit = 0;
+                if (state.cpcSubMode === 0) limit = 16;
+                else if (state.cpcSubMode === 1) limit = 4;
+                else limit = 2;
+
+                let code = `10 MODE ${state.cpcSubMode}\n`;
+                let inkLine = "20 ";
+                for(let i=0; i<limit; i++) {
+                    let hw = (state.cpcPal[i]) ? state.cpcPal[i].hw : 0;
+                    inkLine += `INK ${i},${hw}`;
+                    if(i < limit - 1) inkLine += ": ";
+                }
+                let borderCol = (state.cpcPal[0]) ? state.cpcPal[0].hw : 0;
+                code += inkLine + `\n30 BORDER ${borderCol}\n`;
+                code += `40 MEMORY &3FFF: LOAD "${state.fileName.toUpperCase()}.BIN",&C000\n50 CALL &C000`;
+                o.innerText = code;
+            } 
+            else if(state.mode === 'spec') {
+                o.innerText = `10 LOAD "" SCREEN$`;
+            } 
+            else {
+                o.innerText = "...";
+            }
         }
 
         init();
