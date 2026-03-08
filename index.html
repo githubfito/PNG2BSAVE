@@ -236,7 +236,35 @@
 
         const PAL_SPEC = [{r:0,g:0,b:0}, {r:0,g:0,b:215}, {r:215,g:0,b:0}, {r:215,g:0,b:215}, {r:0,g:215,b:0}, {r:0,g:215,b:215}, {r:215,g:215,b:0}, {r:215,g:215,b:215}, {r:0,g:0,b:0}, {r:0,g:0,b:255}, {r:255,g:0,b:0}, {r:255,g:255,b:255}, {r:0,g:255,b:0}, {r:0,g:255,b:255}, {r:255,g:255,b:0}, {r:255,g:255,b:255}];
         const PAL_CGA = { p1: [{r:0,g:0,b:0}, {r:85,g:255,b:255}, {r:255,g:85,b:255}, {r:255,g:255,b:255}], p2: [{r:0,g:0,b:0}, {r:85,g:255,b:85}, {r:255,g:85,b:85}, {r:255,g:255,b:85}] };
-        const CPC_HW = [{hw:0,r:0,g:0,b:0}, {hw:1,r:0,g:0,b:128}, {hw:2,r:0,g:0,b:255}, {hw:3,r:128,g:0,b:0}, {hw:4,r:128,g:0,b:128}, {hw:5,r:128,g:0,b:255}, {hw:6,r:255,g:0,b:0}, {hw:7,r:255,g:0,b:128}, {hw:8,r:255,g:0,b:255}, {hw:9,r:0,g:128,b:0}, {hw:10,r:0,g:128,b:128}, {hw:11,r:0,g:128,b:255}, {hw:12,r:128,g:128,b:0}, {hw:13,r:128,g:128,b:128}, {hw:14,r:128,g:128,b:255}, {hw:15,r:255,g:128,b:0}, {hw:16,r:255,g:128,b:128}, {hw:17,r:255,g:128,b:255}, {hw:18,r:0,g:255,b:0}, {hw:19,r:0,g:255,b:128}, {hw:20,r:0,g:255,b:255}, {hw:21,r:128,g:255,b:0}, {hw:22,r:128,g:255,b:128}, {hw:23,r:128,g:255,b:255}, {hw:24,r:255,g:255,b:0}, {hw:25,r:255,g:255,b:128}, {hw:26,r:255,g:255,b:255}];
+        const CPC_HW = [
+            {hw:0, r:0, g:0, b:0},      // Negro
+            {hw:1, r:0, g:0, b:128},    // Azul
+            {hw:2, r:0, g:0, b:255},    // Azul Brillante (Piel/Rosa si es pastel) -> Prueba INK X, 2
+            {hw:3, r:128, g:0, b:0},    // Rojo
+            {hw:4, r:128, g:0, b:128},  // Magenta
+            {hw:5, r:128, g:0, b:255},  // Malva
+            {hw:6, r:255, g:0, b:0},    // Rojo Brillante
+            {hw:7, r:255, g:0, b:128},  // Púrpura
+            {hw:8, r:255, g:0, b:255},  // Magenta Brillante
+            {hw:9, r:0, g:128, b:0},    // Verde
+            {hw:10, r:0, g:128, b:128}, // Cian
+            {hw:11, r:0, g:128, b:255}, // Azul Cielo
+            {hw:12, r:128, g:128, b:0}, // Amarillo Barro
+            {hw:13, r:128, g:128, b:128}, // Blanco Grisáceo
+            {hw:14, r:128, g:128, b:255}, // Azul Pastel
+            {hw:15, r:255, g:128, b:0},   // Naranja
+            {hw:16, r:255, g:128, b:128}, // ROSA / PIEL (Este es el que buscas) -> Prueba INK X, 16
+            {hw:17, r:255, g:128, b:255}, // Magenta Pastel
+            {hw:18, r:0, g:255, b:0},     // Verde Brillante
+            {hw:19, r:0, g:255, b:128},   // Verde Mar
+            {hw:20, r:0, g:255, b:255},   // Cian Brillante
+            {hw:21, r:128, g:255, b:0},   // Lima
+            {hw:22, r:128, g:255, b:128}, // Verde Pastel
+            {hw:23, r:128, g:255, b:255}, // Cian Pastel
+            {hw:24, r:255, g:255, b:0},   // AMARILLO (El que te está saliendo ahora)
+            {hw:25, r:255, g:255, b:128}, // Amarillo Pastel
+            {hw:26, r:255, g:255, b:255}  // Blanco Brillante
+        ];        
         const BAYER4 = [[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]];
 
         let specAttributes = new Uint8Array(768); 
